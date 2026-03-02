@@ -206,33 +206,50 @@ export type WaterfallVariant = boolean;
 - **Movement buffer**: RGBA channels encode mode data with threshold-based decoding — lossy compression corrupts values.
 - **Paint buffer**: R channel encodes paint variant (empty/static/gem) — same threshold issue.
 
-### 1.2 Create `src/engine/shaders.ts`
+### 1.2 Create `src/engine/shaders/` directory with `.glsl` files
 
-Move all shader source code as template literal strings. The codebase has **5 shader programs**:
+Shader source lives in separate `.glsl` files, imported as strings at build time via `vite-plugin-glsl`. This gives us syntax highlighting, easier editing, and clean separation.
 
-```ts
-// Main simulation (ping-pong feedback with all movement/paint/noise logic)
-export const VERTEX_SHADER_SOURCE = `...`;       // from vertexShader.glsl
-export const FRAGMENT_SHADER_SOURCE = `...`;     // from fragmentShader.glsl
+**Vite config** already includes `glsl()` plugin and `tsconfig.app.json` includes `vite-plugin-glsl/ext` for TypeScript support.
 
-// Drawing brush (discard-based, brush-sized quads)
-export const DRAW_VERTEX_SHADER_SOURCE = `...`;  // from setupDrawingProgram()
-export const DRAW_FRAGMENT_SHADER_SOURCE = `...`;
-
-// Display blit (minimal texture-to-screen copy)
-export const DISPLAY_VERTEX_SHADER_SOURCE = `...`;
-export const DISPLAY_FRAGMENT_SHADER_SOURCE = `...`;
-
-// Block noise pre-computation (wrapping/black/ribbon at block resolution)
-export const BLOCK_NOISE_VERTEX_SHADER_SOURCE = `...`;
-export const BLOCK_NOISE_FRAGMENT_SHADER_SOURCE = `...`;
-
-// Noise volume generation (fills 3D texture slices)
-export const NOISE_VOLUME_VERTEX_SHADER_SOURCE = `...`;
-export const NOISE_VOLUME_FRAGMENT_SHADER_SOURCE = `...`;
+**Shader files** (5 programs, 10 files):
+```
+src/engine/shaders/
+├── main.vert           ← from vertexShader.glsl (pass-through)
+├── main.frag           ← from fragmentShader.glsl (main simulation)
+├── draw.vert           ← from setupDrawingProgram() in main.js
+├── draw.frag           ← from setupDrawingProgram() in main.js
+├── display.vert        ← from setupDisplayProgram() in main.js
+├── display.frag        ← from setupDisplayProgram() in main.js
+├── blockNoise.vert     ← from setupBlockNoiseProgram() in main.js
+├── blockNoise.frag     ← from setupBlockNoiseProgram() in main.js
+├── noiseVolume.vert    ← from setupNoiseVolumeProgram() in main.js
+└── noiseVolume.frag    ← from setupNoiseVolumeProgram() in main.js
 ```
 
-**Why inline**: Eliminates async fetch at startup. Vite tree-shakes unused exports. Single source of truth. The standalone renderer build script extracts these same strings.
+**Re-export barrel** `src/engine/shaders.ts`:
+```ts
+import mainVert from './shaders/main.vert';
+import mainFrag from './shaders/main.frag';
+import drawVert from './shaders/draw.vert';
+import drawFrag from './shaders/draw.frag';
+import displayVert from './shaders/display.vert';
+import displayFrag from './shaders/display.frag';
+import blockNoiseVert from './shaders/blockNoise.vert';
+import blockNoiseFrag from './shaders/blockNoise.frag';
+import noiseVolumeVert from './shaders/noiseVolume.vert';
+import noiseVolumeFrag from './shaders/noiseVolume.frag';
+
+export {
+  mainVert, mainFrag,
+  drawVert, drawFrag,
+  displayVert, displayFrag,
+  blockNoiseVert, blockNoiseFrag,
+  noiseVolumeVert, noiseVolumeFrag,
+};
+```
+
+**Note for Phase 7 (standalone renderer)**: The build script will read these `.glsl` files and inline them into the standalone HTML.
 
 ### 1.3 Create `src/engine/parameters.ts`
 
