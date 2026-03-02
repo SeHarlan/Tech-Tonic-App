@@ -36,6 +36,7 @@ const EXTRA_FALL_STUTTER_SCALE: [number, number] = [50.0, 500.01];
 const EXTRA_MOVE_STUTTER_SCALE: [number, number] = [500.0, 50.01];
 const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
 const EXTRA_MOVE_STUTTER_THRESHOLD = 0.1;
+const EXTRA_FALL_SHAPE_TIME_MULT = 0.025;
 
 // --- Shader helper ---
 
