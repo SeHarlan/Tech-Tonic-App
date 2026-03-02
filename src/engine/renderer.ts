@@ -481,7 +481,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform3f(mainUnif.staticColor1, STATIC_COLOR_1[0], STATIC_COLOR_1[1], STATIC_COLOR_1[2]);
     gl.uniform3f(mainUnif.staticColor2, STATIC_COLOR_2[0], STATIC_COLOR_2[1], STATIC_COLOR_2[2]);
     gl.uniform3f(mainUnif.staticColor3, STATIC_COLOR_3[0], STATIC_COLOR_3[1], STATIC_COLOR_3[2]);
-    gl.uniform1f(mainUnif.cycleColorHueSpeed, CYCLE_COLOR_HUE_BASE_SPEED);
+    gl.uniform1f(mainUnif.cycleColorHueSpeed, CYCLE_COLOR_HUE_BASE_SPEED * (60 / targetFps));
     gl.uniform1f(mainUnif.extraFallShapeTimeMult, EXTRA_FALL_SHAPE_TIME_MULT);
     gl.uniform2f(mainUnif.extraFallStutterScale, EXTRA_FALL_STUTTER_SCALE[0], EXTRA_FALL_STUTTER_SCALE[1]);
     gl.uniform2f(mainUnif.extraMoveStutterScale, EXTRA_MOVE_STUTTER_SCALE[0], EXTRA_MOVE_STUTTER_SCALE[1]);
@@ -790,8 +790,9 @@ export function createEngine(config: EngineConfig): Engine {
 
   // Load initial state if provided
   if (config.initialState) {
-    // Kick off async load — engine should be started after this resolves
-    engine.loadState(config.initialState);
+    engine.loadState(config.initialState).catch((err) => {
+      console.error('Failed to load initial engine state:', err);
+    });
   }
 
   return engine;

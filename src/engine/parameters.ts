@@ -56,33 +56,43 @@ function getShapeScale(
   baseScale: [number, number],
   threshold: number,
   adjustmentFactor: number,
+  fxWithBlocking: boolean,
+  blockingScale: number,
 ): [number, number] {
+  // shapeNormalizer keeps shape size stable so threshold acts as frequency adjuster
   const shapeNormalizer = 0.2 / threshold;
-  return baseScale.map(
-    (x) => x * shapeNormalizer * adjustmentFactor,
-  ) as [number, number];
+  return baseScale.map((n) => {
+    let base = fxWithBlocking ? n / blockingScale : n;
+    base /= shapeNormalizer;
+    base /= adjustmentFactor;
+    return base;
+  }) as [number, number];
 }
 
 export function getFallShapeScale(
   threshold: number,
   useFallBlob: boolean,
+  fxWithBlocking: boolean,
+  blockingScale: number,
 ): [number, number] {
   const shouldFallBaseScale: [number, number] = useFallBlob
     ? [10, 8]
     : [10, 0.5];
   const blobAdjustment = useFallBlob ? 3 : 1;
-  return getShapeScale(shouldFallBaseScale, threshold, blobAdjustment);
+  return getShapeScale(shouldFallBaseScale, threshold, blobAdjustment, fxWithBlocking, blockingScale);
 }
 
 export function getMoveShapeScale(
   threshold: number,
   useMoveBlob: boolean,
+  fxWithBlocking: boolean,
+  blockingScale: number,
 ): [number, number] {
   const shouldMoveBaseScale: [number, number] = useMoveBlob
     ? [5, 5]
     : [0.5, 5];
   const blobAdjustment = useMoveBlob ? 2 : 1;
-  return getShapeScale(shouldMoveBaseScale, threshold, blobAdjustment);
+  return getShapeScale(shouldMoveBaseScale, threshold, blobAdjustment, fxWithBlocking, blockingScale);
 }
 
 // --- Parameter Randomization ---
@@ -143,7 +153,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   const useMoveBlob = rng() < 0.2;
   const moveShapeSpeed = useMoveBlob ? 0.03125 : 0.025;
-  const moveShapeScale = getMoveShapeScale(shouldMoveThreshold, useMoveBlob);
+  const moveShapeScale = getMoveShapeScale(shouldMoveThreshold, useMoveBlob, fxWithBlocking, blockingScale);
 
   // Fall parameters
   const shouldFallThreshold = weightedRandom<number>(
@@ -178,7 +188,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   const useFallBlob = rng() < 0.2;
   const fallShapeSpeed = useFallBlob ? 0.052 : 0.044;
-  const shouldFallScale = getFallShapeScale(shouldFallThreshold, useFallBlob);
+  const shouldFallScale = getFallShapeScale(shouldFallThreshold, useFallBlob, fxWithBlocking, blockingScale);
 
   // Black noise parameters
   const blackNoiseThreshold = weightedRandom<number>(
@@ -246,6 +256,8 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const extraFallShapeScale = getFallShapeScale(
     extraFallShapeThreshold,
     useFallBlob,
+    fxWithBlocking,
+    blockingScale,
   ).map((x) => x * 3) as [number, number];
 
   // Extra move parameters
@@ -263,6 +275,8 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const extraMoveShapeScale = getMoveShapeScale(
     extraMoveShapeThreshold,
     useMoveBlob,
+    fxWithBlocking,
+    blockingScale,
   ).map((x) => x * 3) as [number, number];
 
   return {
