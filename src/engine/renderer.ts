@@ -7,9 +7,9 @@ import { serializeState, loadStateIntoTextures, type SerializedState } from './s
 
 // --- Constants ---
 
-const CANVAS_SCALE = 1.2;
-const FIXED_CANVAS_WIDTH = 900 * CANVAS_SCALE;  // 1080
-const FIXED_CANVAS_HEIGHT = 1600 * CANVAS_SCALE; // 1920
+const CANVAS_SCALE = 1;
+const FIXED_CANVAS_WIDTH = 1080 * CANVAS_SCALE;  
+const FIXED_CANVAS_HEIGHT = 1920 * CANVAS_SCALE; 
 const FIXED_PIXEL_RATIO_UNIFORM = 1.0;
 const DEFAULT_TARGET_FPS = 60;
 const NOISE_VOL_XY = 128;
