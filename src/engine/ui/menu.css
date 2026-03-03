@@ -413,18 +413,6 @@
     font-size: 20px;
 }
 
-/* ===== RECORDING STATE ===== */
-#btn-record-gif.recording {
-    border-color: #ff4040;
-    color: #ff4040;
-    animation: rec-pulse 1s ease-in-out infinite;
-}
-
-@keyframes rec-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-}
-
 /* ===== MOBILE RESPONSIVENESS ===== */
 @media (max-width: 480px) {
     #menu-container {

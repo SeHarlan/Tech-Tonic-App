@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
 import type { Engine } from '../engine/renderer';
-import type { DrawMode, EraseVariant } from '../engine/types';
-import { setupMenu } from '../engine/ui/menu.js';
+import type { EraseVariant } from '../engine/types';
+import { setupMenu } from '../engine/ui/menu';
 import '../engine/ui/menu.css';
 
 export interface MenuDrawerProps {
   engine: Engine | null;
+  onAppMenu?: () => void;
 }
 
 /** Map menu.js action names to Engine API calls. */
@@ -88,14 +89,6 @@ function dispatchToEngine(
     case 'globalReset':
       engine.forceReset();
       break;
-    case 'recordVideo':
-      if (engine.isRecording()) {
-        engine.stopRecording();
-      } else {
-        engine.startRecording();
-      }
-      break;
-
     // Keyboard-only actions
     case 'cycleEraseMode':
       engine.setDrawMode('erase');
@@ -104,15 +97,25 @@ function dispatchToEngine(
     case 'saveScreenshot':
       engine.captureScreenshot();
       break;
+    case 'recordVideo':
+      if (engine.isRecording()) {
+        engine.stopRecording();
+      } else {
+        engine.startRecording();
+      }
+      break;
     case 'newSeed':
       engine.setSeed(Math.floor(Math.random() * 1000));
       break;
   }
 }
 
-export function MenuDrawer({ engine }: MenuDrawerProps) {
+export function MenuDrawer({ engine, onAppMenu }: MenuDrawerProps) {
   const engineRef = useRef(engine);
   engineRef.current = engine;
+
+  const onAppMenuRef = useRef(onAppMenu);
+  onAppMenuRef.current = onAppMenu;
 
   const menuRef = useRef<ReturnType<typeof setupMenu> | null>(null);
 
@@ -122,6 +125,9 @@ export function MenuDrawer({ engine }: MenuDrawerProps) {
         if (engineRef.current) {
           dispatchToEngine(engineRef.current, action, state);
         }
+      },
+      onAppMenu() {
+        onAppMenuRef.current?.();
       },
     });
     menuRef.current = ctrl;
@@ -206,8 +212,8 @@ export function MenuDrawer({ engine }: MenuDrawerProps) {
               <button className="menu-btn" id="btn-global-reset" data-action="globalReset" title="Global Reset">
                 <span className="icon">⟲</span>
               </button>
-              <button className="menu-btn" id="btn-record-gif" data-action="recordVideo" title="Record Video (R)">
-                <span className="icon">●</span>
+              <button className="menu-btn" id="btn-app-menu" data-action="openAppMenu" title="Menu">
+                <span className="icon">☰</span>
               </button>
             </div>
 

@@ -148,6 +148,18 @@ export function createEngine(config: EngineConfig): Engine {
   canvas.height = FIXED_CANVAS_HEIGHT;
   gl.viewport(0, 0, canvas.width, canvas.height);
 
+  // Crisp pixel rendering — no bilinear smoothing when canvas is scaled.
+  // Firefox only supports -moz-crisp-edges; Chrome/Safari support pixelated.
+  // Setting an unsupported value is a no-op, so try vendor prefix first.
+  canvas.style.imageRendering = '-moz-crisp-edges';
+  canvas.style.imageRendering = 'pixelated';
+
+  // Prevent mobile browser gestures (pinch-zoom, scroll, pull-to-refresh)
+  canvas.style.touchAction = 'none';
+
+  // Remove inline-element baseline gap below canvas
+  canvas.style.display = 'block';
+
   // --- Main Shader Program ---
 
   const mainProg = linkProgram(gl, mainVert, mainFrag);
