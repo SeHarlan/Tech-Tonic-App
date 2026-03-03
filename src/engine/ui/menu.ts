@@ -322,8 +322,11 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   // ---- Drawer handle tap ----
   const drawerHandle = document.getElementById('drawer-handle');
   function handleDrawerTap(e: PointerEvent) {
-    if (!isMenuOpen && !isMenuAnimating) {
-      e.stopPropagation();
+    if (isMenuAnimating) return;
+    e.stopPropagation();
+    if (isMenuOpen) {
+      closeMenu();
+    } else {
       openMenu();
     }
   }

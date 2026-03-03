@@ -14,7 +14,7 @@
 }
 
 #menu-container.menu-closed {
-    transform: translateX(-50%) translateY(calc(100% - 30px));
+    transform: translateX(-50%) translateY(calc(100% - 40px));
     pointer-events: none;
 }
 
@@ -31,6 +31,7 @@
     justify-content: center;
     cursor: pointer;
     padding: 8px 0;
+    margin-bottom: 12px;
     gap: 4px;
 }
 
@@ -39,21 +40,19 @@
     height: 3px;
     background: rgba(0, 255, 128, 0.6);
     border-radius: 2px;
-    transition: background 0.15s ease, width 0.15s ease;
+    transition: background 0.15s ease, width 0.15s ease, box-shadow 0.15s ease;
+    box-shadow:
+        0 0 6px rgba(0, 255, 128, 0.5),
+        0 0 14px rgba(0, 255, 128, 0.25);
 }
 
 #drawer-handle:hover .drawer-handle-bar,
 #drawer-handle:active .drawer-handle-bar {
     background: rgba(0, 255, 128, 0.7);
     width: 50px;
-}
-
-#menu-container:not(.menu-closed) #drawer-handle {
-    opacity: 0;
-    pointer-events: none;
-    height: 0;
-    padding: 0;
-    overflow: hidden;
+    box-shadow:
+        0 0 8px rgba(0, 255, 128, 0.6),
+        0 0 20px rgba(0, 255, 128, 0.35);
 }
 
 #menu-panel {
@@ -64,30 +63,6 @@
     flex-direction: column;
     gap: 8px;
     position: relative;
-}
-
-/* ===== CLOSE HANDLE ===== */
-#close-handle {
-    width: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 8px 0;
-}
-
-.close-handle-chevron {
-    width: 40px;
-    height: 10px;
-    color: rgba(0, 255, 128, 0.6);
-}
-
-#menu-container.menu-closed #close-handle {
-    opacity: 0;
-    pointer-events: none;
-    height: 0;
-    padding: 0;
-    overflow: hidden;
 }
 
 /* ===== GLOBAL ROW ===== */
