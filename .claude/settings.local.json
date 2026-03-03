@@ -9,7 +9,8 @@
       "Bash(npx vite build 2>&1 | tail -20)",
       "Bash(npx eslint src/pages/canvas/MenuDrawer.tsx 2>&1)",
       "Bash(npx tsc --noEmit 2>&1 | head -10)",
-      "Bash(npx tsc --noEmit 2>&1 | head -30)"
+      "Bash(npx tsc --noEmit 2>&1 | head -30)",
+      "Bash(npx tsc --noEmit --pretty 2>&1 | grep -i \"MenuDrawer\" | head -20)"
     ]
   }
 }

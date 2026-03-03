@@ -19,7 +19,7 @@ function toCanvasCoords(
 export function CanvasPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuDrawerRef = useRef<MenuDrawerHandle>(null);
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1000));
+  const [seed] = useState(() => Math.floor(Math.random() * 1000));
   const [engine, setEngine] = useState<Engine | null>(null);
   // const [fps, setFps] = useState(0);
   const [showOverlay, setShowOverlay] = useState(false);

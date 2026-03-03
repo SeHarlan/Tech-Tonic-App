@@ -122,9 +122,9 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
 
   // Keep latest props in refs so stable callbacks always see current values
   const engineRef = useRef(engine);
-  engineRef.current = engine;
+  useEffect(() => { engineRef.current = engine; });
   const onAppMenuRef = useRef(onAppMenu);
-  onAppMenuRef.current = onAppMenu;
+  useEffect(() => { onAppMenuRef.current = onAppMenu; });
 
   useImperativeHandle(ref, () => ({
     close: () => menuRef.current?.close(),
@@ -158,7 +158,7 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
       menuRef.current = null;
       node.innerHTML = '';
     };
-  }, []);
+  }, [onMenuAction, onMenuAppMenu]);
 
   // Sync brush size options from engine when engine changes
   useEffect(() => {
