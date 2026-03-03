@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useImperativeHandle, useRef, forwardRef } from 'react';
+import { useEffect, useCallback, useImperativeHandle, useRef, forwardRef } from 'react';
 import type { Engine } from '../../engine/renderer';
 import type { EraseVariant } from '../../engine/types';
 import { setupMenu } from '../../engine/ui/menu';
@@ -12,13 +12,14 @@ export interface MenuDrawerHandle {
 export interface MenuDrawerProps {
   engine: Engine | null;
   onAppMenu?: () => void;
+  hidden?: boolean;
 }
 
 /** Map menu.js action names to Engine API calls. */
 function dispatchToEngine(
   engine: Engine,
   action: string,
-  menuState: { brushSize: number; eraseVariant?: string },
+  menuState: { brushSize: number; eraseVariant?: string; waterfallVariant?: boolean },
 ) {
   const dm = engine.getDrawingManager();
 
@@ -38,12 +39,12 @@ function dispatchToEngine(
     case 'waterfallUp':
       engine.setDrawMode('waterfall');
       engine.setDirection('up');
-      engine.setWaterfallVariant(true);
+      engine.setWaterfallVariant(menuState.waterfallVariant ?? true);
       break;
     case 'waterfallDown':
       engine.setDrawMode('waterfall');
       engine.setDirection('down');
-      engine.setWaterfallVariant(true);
+      engine.setWaterfallVariant(menuState.waterfallVariant ?? true);
       break;
     case 'moveLeft':
       engine.setDrawMode('move');
@@ -115,25 +116,32 @@ function dispatchToEngine(
   }
 }
 
-export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function MenuDrawer({ engine, onAppMenu }, ref) {
+export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function MenuDrawer({ engine, onAppMenu, hidden }, ref) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<ReturnType<typeof setupMenu> | null>(null);
+
+  // Keep latest props in refs so stable callbacks always see current values
+  const engineRef = useRef(engine);
+  engineRef.current = engine;
+  const onAppMenuRef = useRef(onAppMenu);
+  onAppMenuRef.current = onAppMenu;
 
   useImperativeHandle(ref, () => ({
     close: () => menuRef.current?.close(),
   }));
 
-  const onMenuAction = useEffectEvent(
-    (action: string, state: { brushSize: number; eraseVariant?: string }) => {
-      if (engine) {
-        dispatchToEngine(engine, action, state);
+  const onMenuAction = useCallback(
+    (action: string, state: { brushSize: number; eraseVariant?: string; waterfallVariant?: boolean }) => {
+      if (engineRef.current) {
+        dispatchToEngine(engineRef.current, action, state);
       }
     },
+    [],
   );
 
-  const onMenuAppMenu = useEffectEvent(() => {
-    onAppMenu?.();
-  });
+  const onMenuAppMenu = useCallback(() => {
+    onAppMenuRef.current?.();
+  }, []);
 
   useEffect(() => {
     if (!wrapperRef.current) return;
@@ -163,5 +171,5 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
     });
   }, [engine]);
 
-  return <div ref={wrapperRef} />;
+  return <div ref={wrapperRef} style={hidden ? { visibility: 'hidden' } : undefined} />;
 });

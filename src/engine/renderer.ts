@@ -694,6 +694,24 @@ export function createEngine(config: EngineConfig): Engine {
     forceReset() {
       forceResetFlag = true;
       forceResetFrames = 3;
+
+      // Clear drawing buffers (movement + paint)
+      drawing.clearAll();
+
+      // Clear both ping-pong framebuffers
+      for (let i = 0; i < 2; i++) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[i]);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // Reset time
+      time = 0;
+      totalFrameCount = 0;
+
+      // Clear pointer state to prevent stuck strokes
+      isPointerDown = false;
     },
 
     async serializeState() {

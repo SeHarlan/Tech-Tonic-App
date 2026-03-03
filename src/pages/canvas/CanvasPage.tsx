@@ -18,59 +18,62 @@ function toCanvasCoords(
 
 export function CanvasPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<Engine | null>(null);
   const menuDrawerRef = useRef<MenuDrawerHandle>(null);
-  const [seed, setSeed] = useState(Math.floor(Math.random() * 1000));
-  const [fps, setFps] = useState(0);
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1000));
+  const [engine, setEngine] = useState<Engine | null>(null);
+  // const [fps, setFps] = useState(0);
   const [showOverlay, setShowOverlay] = useState(false);
 
   const [canvasBottom, setCanvasBottom] = useState(0);
 
-  const openOverlay = useCallback(() => {
-    menuDrawerRef.current?.close();
-    if (canvasRef.current) {
-      const h = canvasRef.current.offsetHeight;
-      setCanvasBottom(window.innerHeight / 2 + (h * 0.8) / 2);
-    }
-    setShowOverlay(true);
+  const toggleOverlay = useCallback(() => {
+    setShowOverlay(prev => {
+      if (prev) return false;
+      menuDrawerRef.current?.close();
+      if (canvasRef.current) {
+        const h = canvasRef.current.offsetHeight;
+        setCanvasBottom(window.innerHeight / 2 + (h * 0.8) / 2);
+      }
+      return true;
+    });
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const engine = createEngine({
+    const eng = createEngine({
       canvas,
       seed,
-      onFpsUpdate: setFps,
+      // onFpsUpdate: setFps,
     });
-    engineRef.current = engine;
-    engine.start();
+    setEngine(eng);
+    eng.start();
 
     return () => {
-      engine.destroy();
-      engineRef.current = null;
+      eng.destroy();
+      setEngine(null);
     };
   }, [seed]);
 
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
-    if (!canvas || !engineRef.current) return;
+    if (!canvas || !engine) return;
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     const { x, y } = toCanvasCoords(e, canvas);
-    engineRef.current.handlePointerDown(x, y);
-  }, []);
+    engine.handlePointerDown(x, y);
+  }
 
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+  function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
-    if (!canvas || !engineRef.current) return;
+    if (!canvas || !engine) return;
     const { x, y } = toCanvasCoords(e, canvas);
-    engineRef.current.handlePointerMove(x, y);
-  }, []);
+    engine.handlePointerMove(x, y);
+  }
 
-  const onPointerUp = useCallback(() => {
-    engineRef.current?.handlePointerUp();
-  }, []);
+  function onPointerUp() {
+    engine?.handlePointerUp();
+  }
 
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center">
@@ -82,7 +85,7 @@ export function CanvasPage() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       />
-      <MenuDrawer ref={menuDrawerRef} engine={engineRef.current} onAppMenu={openOverlay} />
+      <MenuDrawer ref={menuDrawerRef} engine={engine} onAppMenu={toggleOverlay} hidden={showOverlay} />
 
       {showOverlay && (
         <CanvasOverlay canvasBottom={canvasBottom} onClose={() => setShowOverlay(false)} />

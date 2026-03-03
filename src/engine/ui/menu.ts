@@ -101,10 +101,16 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
 
     // Movement modes
     waterfallUp() {
+      if (state.currentMode === 'waterfall' && state.currentDirection === 'up') {
+        state.waterfallVariant = !state.waterfallVariant;
+      }
       state.currentMode = 'waterfall';
       state.currentDirection = 'up';
     },
     waterfallDown() {
+      if (state.currentMode === 'waterfall' && state.currentDirection === 'down') {
+        state.waterfallVariant = !state.waterfallVariant;
+      }
       state.currentMode = 'waterfall';
       state.currentDirection = 'down';
     },
@@ -208,6 +214,9 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
         return;
       case 'n':
         dispatch('newSeed');
+        return;
+      case 'q':
+        dispatch('openAppMenu');
         return;
       case 'm':
         if (isMenuOpen) { closeMenu(); } else { openMenu(); }

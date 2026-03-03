@@ -8,9 +8,12 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 14px;
     transition: transform 0.25s ease-out;
     padding-bottom: 24px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 #menu-container.menu-closed {
@@ -31,14 +34,13 @@
     justify-content: center;
     cursor: pointer;
     padding: 8px 0;
-    margin-bottom: 12px;
     gap: 4px;
 }
 
 .drawer-handle-bar {
     width: 40px;
     height: 3px;
-    background: rgba(0, 255, 128, 0.6);
+    background: rgba(0, 255, 128, 0.7);
     border-radius: 2px;
     transition: background 0.15s ease, width 0.15s ease, box-shadow 0.15s ease;
     box-shadow:
@@ -48,8 +50,8 @@
 
 #drawer-handle:hover .drawer-handle-bar,
 #drawer-handle:active .drawer-handle-bar {
-    background: rgba(0, 255, 128, 0.7);
-    width: 50px;
+    background: rgba(0, 255, 128, 0.75);
+    width: 46px;
     box-shadow:
         0 0 8px rgba(0, 255, 128, 0.6),
         0 0 20px rgba(0, 255, 128, 0.35);
