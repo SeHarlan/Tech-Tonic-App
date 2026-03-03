@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { createEngine, type Engine } from '../engine/renderer';
 import { MenuDrawer } from './MenuDrawer';
+import { MenuButton } from './MenuButton';
 
 function toCanvasCoords(
   e: React.PointerEvent<HTMLCanvasElement>,
@@ -18,6 +20,8 @@ export function ArtCanvas() {
   const engineRef = useRef<Engine | null>(null);
   const [seed, setSeed] = useState(Math.floor(Math.random() * 1000));
   const [fps, setFps] = useState(0);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -66,7 +70,24 @@ export function ArtCanvas() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       />
-      <MenuDrawer engine={engineRef.current} />
+      <MenuDrawer engine={engineRef.current} onAppMenu={() => setShowOverlay(true)} />
+
+      {showOverlay && (
+        <div
+          className="fixed inset-0 z-[600] flex items-center justify-center"
+          style={{ background: 'rgba(0, 0, 0, 0.8)' }}
+          onClick={() => setShowOverlay(false)}
+        >
+          <div
+            className="flex flex-col gap-1"
+            style={{ background: 'rgba(0, 0, 0, 0.95)', border: '1px solid rgba(0, 255, 128, 0.5)', padding: '12px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MenuButton active onClick={() => navigate('/mint')}>Mint</MenuButton>
+            <MenuButton onClick={() => setShowOverlay(false)}>Close</MenuButton>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
