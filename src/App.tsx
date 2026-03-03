@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route } from 'react-router';
-import { ArtCanvas } from './components/ArtCanvas';
-import { MintPage } from './components/MintPage';
+import { CanvasPage } from './pages/canvas';
+import { MintPage } from './pages/mint';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<ArtCanvas />} />
+        <Route path="/" element={<CanvasPage />} />
         <Route path="/mint" element={<MintPage />} />
       </Routes>
     </BrowserRouter>

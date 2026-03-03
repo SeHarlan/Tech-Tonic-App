@@ -1,8 +1,9 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router';
-import { createEngine, type Engine } from '../engine/renderer';
-import { MenuDrawer } from './MenuDrawer';
-import { MenuButton } from './MenuButton';
+import { createEngine, type Engine } from '../../engine/renderer';
+import { cn } from '../../utils/ui-helpers';
+import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
+import { CanvasOverlay } from './CanvasOverlay';
+import './canvas-overlay.css';
 
 function toCanvasCoords(
   e: React.PointerEvent<HTMLCanvasElement>,
@@ -15,13 +16,24 @@ function toCanvasCoords(
   };
 }
 
-export function ArtCanvas() {
+export function CanvasPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Engine | null>(null);
+  const menuDrawerRef = useRef<MenuDrawerHandle>(null);
   const [seed, setSeed] = useState(Math.floor(Math.random() * 1000));
   const [fps, setFps] = useState(0);
   const [showOverlay, setShowOverlay] = useState(false);
-  const navigate = useNavigate();
+
+  const [canvasBottom, setCanvasBottom] = useState(0);
+
+  const openOverlay = useCallback(() => {
+    menuDrawerRef.current?.close();
+    if (canvasRef.current) {
+      const h = canvasRef.current.offsetHeight;
+      setCanvasBottom(window.innerHeight / 2 + (h * 0.8) / 2);
+    }
+    setShowOverlay(true);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -64,29 +76,16 @@ export function ArtCanvas() {
     <div className="fixed inset-0 bg-black flex items-center justify-center">
       <canvas
         ref={canvasRef}
-        className="max-h-full max-w-full object-contain touch-none"
+        className={cn('max-h-full max-w-full object-contain touch-none transition-transform duration-500 ease-in-out', showOverlay && 'canvas-overlay-glow')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       />
-      <MenuDrawer engine={engineRef.current} onAppMenu={() => setShowOverlay(true)} />
+      <MenuDrawer ref={menuDrawerRef} engine={engineRef.current} onAppMenu={openOverlay} />
 
       {showOverlay && (
-        <div
-          className="fixed inset-0 z-[600] flex items-center justify-center"
-          style={{ background: 'rgba(0, 0, 0, 0.8)' }}
-          onClick={() => setShowOverlay(false)}
-        >
-          <div
-            className="flex flex-col gap-1"
-            style={{ background: 'rgba(0, 0, 0, 0.95)', border: '1px solid rgba(0, 255, 128, 0.5)', padding: '12px' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MenuButton active onClick={() => navigate('/mint')}>Mint</MenuButton>
-            <MenuButton onClick={() => setShowOverlay(false)}>Close</MenuButton>
-          </div>
-        </div>
+        <CanvasOverlay canvasBottom={canvasBottom} onClose={() => setShowOverlay(false)} />
       )}
     </div>
   );

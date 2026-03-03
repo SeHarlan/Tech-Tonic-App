@@ -1,4 +1,5 @@
-import '../engine/ui/menu.css';
+import { cn } from '../../utils/ui-helpers';
+import '../../engine/ui/menu.css';
 
 interface MenuButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
@@ -7,7 +8,7 @@ interface MenuButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> 
 export function MenuButton({ active, children, className, ...props }: MenuButtonProps) {
   return (
     <button
-      className={`menu-btn${active ? ' active' : ''}${className ? ' ' + className : ''}`}
+      className={cn('menu-btn', active && 'active', className)}
       style={{ width: 'auto', padding: '0 24px' }}
       {...props}
     >

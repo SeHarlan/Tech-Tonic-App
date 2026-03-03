@@ -6,7 +6,9 @@
       "mcp__plugin_context7_context7__query-docs",
       "Bash(git add IMPLEMENTATION_PLAN.md bun.lock package.json tsconfig.app.json vite.config.ts .env .env.production .gitignore src/config/env.ts src/engine/types.ts src/engine/shaders.ts src/engine/shaders/ src/engine/parameters.ts src/engine/drawing.ts src/engine/recording.ts src/engine/state.ts src/engine/renderer.ts src/index.css)",
       "Bash(git add src/engine/renderer.ts)",
-      "Bash(npx vite build 2>&1 | tail -20)"
+      "Bash(npx vite build 2>&1 | tail -20)",
+      "Bash(npx eslint src/pages/canvas/MenuDrawer.tsx 2>&1)",
+      "Bash(npx tsc --noEmit 2>&1 | head -10)"
     ]
   }
 }

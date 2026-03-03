@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { MenuButton } from './MenuButton';
+import { MenuButton } from '../../components/ui/MenuButton';
 
 export function MintPage() {
   const navigate = useNavigate();

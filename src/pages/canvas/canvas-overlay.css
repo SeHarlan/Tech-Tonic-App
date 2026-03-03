@@ -1,0 +1,198 @@
+/* ===== CANVAS OVERLAY ===== */
+.canvas-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+
+  /* Active-style background with transparency */
+  background: rgba(0, 80, 40, 0.4);
+  overflow: hidden;
+
+  /* Pip-Boy background flicker */
+  animation:
+    overlay-bg 4s steps(1) infinite,
+    overlay-glow 4s steps(1) infinite;
+}
+
+/* Single sweeping scan line */
+.canvas-overlay::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    transparent 45%,
+    rgba(255, 255, 255, 0.04) 49%,
+    rgba(255, 255, 255, 0.07) 50%,
+    rgba(255, 255, 255, 0.04) 51%,
+    transparent 55%
+  );
+  animation: pip-scanline 10s linear infinite;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Static glitch bar on ::before */
+.canvas-overlay::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 2px;
+  background: rgba(0, 255, 128, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: overlay-glitch-a 11s steps(1) infinite;
+}
+
+/* Shared base for glitch bar spans */
+.canvas-overlay-glitch {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 2px;
+  background: rgba(0, 255, 128, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.canvas-overlay-glitch-a { animation: overlay-glitch-b 7.3s steps(1) infinite; }
+.canvas-overlay-glitch-b { animation: overlay-glitch-c 13.1s steps(1) infinite; }
+.canvas-overlay-glitch-c { animation: overlay-glitch-d 9.7s steps(1) infinite; }
+
+/* Glow on overlay buttons */
+.canvas-overlay-menu .menu-btn {
+  box-shadow:
+    0 0 8px rgba(0, 255, 128, 0.6),
+    0 0 20px rgba(0, 255, 128, 0.3),
+    0 0 40px rgba(0, 255, 128, 0.15);
+  animation: canvas-glow-pulse 4s steps(1) infinite;
+}
+
+/* Button container — fills gap between canvas bottom and screen bottom */
+.canvas-overlay-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  z-index: 1;
+}
+
+/* Background flicker — more transparent version of pip-bg */
+@keyframes overlay-bg {
+  0%, 100% { background-color: rgba(0, 80, 40, 0.4); }
+  11%      { background-color: rgba(0, 70, 35, 0.37); }
+  13%      { background-color: rgba(0, 85, 42, 0.42); }
+  37%      { background-color: rgba(0, 75, 38, 0.38); }
+  39%      { background-color: rgba(0, 80, 40, 0.4); }
+  71%      { background-color: rgba(0, 90, 45, 0.43); }
+  73%      { background-color: rgba(0, 80, 40, 0.4); }
+}
+
+/* Subtle border glow on overlay */
+@keyframes overlay-glow {
+  0%, 100% { box-shadow: inset 0 0 30px rgba(0, 255, 128, 0.05); }
+  7%       { box-shadow: inset 0 0 50px rgba(0, 255, 128, 0.08); }
+  9%       { box-shadow: inset 0 0 20px rgba(0, 255, 128, 0.03); }
+  31%      { box-shadow: inset 0 0 40px rgba(0, 255, 128, 0.07); }
+  33%      { box-shadow: none; }
+  35%      { box-shadow: inset 0 0 30px rgba(0, 255, 128, 0.05); }
+  62%      { box-shadow: inset 0 0 60px rgba(0, 255, 128, 0.1); }
+  64%      { box-shadow: inset 0 0 15px rgba(0, 255, 128, 0.02); }
+  66%      { box-shadow: inset 0 0 30px rgba(0, 255, 128, 0.05); }
+  88%      { box-shadow: none; }
+  90%      { box-shadow: inset 0 0 35px rgba(0, 255, 128, 0.06); }
+}
+
+/*
+  Four independent glitch bar animations at coprime durations (11s, 7.3s, 13.1s, 9.7s).
+  Each hits different Y positions at different times, so sometimes
+  you see none, sometimes 1, occasionally 2+ at once.
+*/
+
+@keyframes overlay-glitch-a {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  8%       { opacity: 0.12; transform: translateY(38vh); }
+  9.5%     { opacity: 0; }
+  31%      { opacity: 0.08; transform: translateY(71vh); }
+  32%      { opacity: 0; }
+  57%      { opacity: 0.15; transform: translateY(15vh); }
+  58.5%    { opacity: 0; }
+  79%      { opacity: 0.1;  transform: translateY(52vh); }
+  80%      { opacity: 0; }
+}
+
+@keyframes overlay-glitch-b {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  14%      { opacity: 0.1;  transform: translateY(83vh); }
+  15.5%    { opacity: 0; }
+  42%      { opacity: 0.14; transform: translateY(22vh); }
+  43%      { opacity: 0; }
+  68%      { opacity: 0.07; transform: translateY(61vh); }
+  69.5%    { opacity: 0; }
+  91%      { opacity: 0.12; transform: translateY(9vh); }
+  92%      { opacity: 0; }
+}
+
+@keyframes overlay-glitch-c {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  6%       { opacity: 0.09; transform: translateY(47vh); }
+  7%       { opacity: 0; }
+  27%      { opacity: 0.16; transform: translateY(76vh); }
+  28.5%    { opacity: 0; }
+  53%      { opacity: 0.06; transform: translateY(33vh); }
+  54%      { opacity: 0; }
+  82%      { opacity: 0.13; transform: translateY(88vh); }
+  83.5%    { opacity: 0; }
+}
+
+@keyframes overlay-glitch-d {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  11%      { opacity: 0.11; transform: translateY(64vh); }
+  12.5%    { opacity: 0; }
+  36%      { opacity: 0.08; transform: translateY(18vh); }
+  37%      { opacity: 0; }
+  63%      { opacity: 0.17; transform: translateY(91vh); }
+  64.5%    { opacity: 0; }
+  85%      { opacity: 0.06; transform: translateY(42vh); }
+  86%      { opacity: 0; }
+}
+
+/* Glowing outline on canvas when overlay is active */
+.canvas-overlay-glow {
+  box-shadow:
+    0 0 8px rgba(0, 255, 128, 0.6),
+    0 0 20px rgba(0, 255, 128, 0.3),
+    0 0 40px rgba(0, 255, 128, 0.15);
+  border: 1px solid rgba(0, 255, 128, 0.5);
+  transform: scale(0.8);
+  animation: canvas-glow-pulse 4s steps(1) infinite;
+}
+
+@keyframes canvas-glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 255, 128, 0.6), 0 0 20px rgba(0, 255, 128, 0.3), 0 0 40px rgba(0, 255, 128, 0.15); }
+  11%      { box-shadow: 0 0 12px rgba(0, 255, 128, 0.7), 0 0 28px rgba(0, 255, 128, 0.4), 0 0 50px rgba(0, 255, 128, 0.2); }
+  13%      { box-shadow: 0 0 6px rgba(0, 255, 128, 0.5), 0 0 16px rgba(0, 255, 128, 0.25), 0 0 35px rgba(0, 255, 128, 0.12); }
+  37%      { box-shadow: 0 0 10px rgba(0, 255, 128, 0.65), 0 0 24px rgba(0, 255, 128, 0.35), 0 0 45px rgba(0, 255, 128, 0.18); }
+  39%      { box-shadow: 0 0 8px rgba(0, 255, 128, 0.6), 0 0 20px rgba(0, 255, 128, 0.3), 0 0 40px rgba(0, 255, 128, 0.15); }
+  62%      { box-shadow: 0 0 14px rgba(0, 255, 128, 0.75), 0 0 32px rgba(0, 255, 128, 0.45), 0 0 55px rgba(0, 255, 128, 0.22); }
+  64%      { box-shadow: 0 0 5px rgba(0, 255, 128, 0.45), 0 0 14px rgba(0, 255, 128, 0.2), 0 0 30px rgba(0, 255, 128, 0.1); }
+  66%      { box-shadow: 0 0 8px rgba(0, 255, 128, 0.6), 0 0 20px rgba(0, 255, 128, 0.3), 0 0 40px rgba(0, 255, 128, 0.15); }
+  88%      { box-shadow: 0 0 4px rgba(0, 255, 128, 0.4), 0 0 12px rgba(0, 255, 128, 0.18), 0 0 25px rgba(0, 255, 128, 0.08); }
+  90%      { box-shadow: 0 0 9px rgba(0, 255, 128, 0.62), 0 0 22px rgba(0, 255, 128, 0.32), 0 0 42px rgba(0, 255, 128, 0.16); }
+}
+
