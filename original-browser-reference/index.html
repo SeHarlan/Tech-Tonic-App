@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tech-Tonic</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="container">
+        <canvas id="glCanvas"></canvas>
+
+        <!-- Brush overlay that follows cursor -->
+        <div id="brush-overlay"></div>
+
+        <!-- GIF recording indicator -->
+        <div id="gif-recording-indicator" class="hidden">
+            <div class="rec-dot"></div>
+            <span>REC</span>
+        </div>
+
+        <!-- Performance warning indicator -->
+        <div id="fps-warning-indicator" class="hidden">
+            <span id="fps-warning-text">LOW FPS</span>
+        </div>
+
+        <!-- Loading overlay -->
+        <div id="loading-overlay">
+            <div class="loading-text">Loading...</div>
+        </div>
+
+        <!-- Error message overlay (hidden by default) -->
+        <div id="error-overlay" class="hidden">
+            <div class="error-message">WebGL could not be initialized</div>
+        </div>
+
+        <!-- Menu Container (drawer) -->
+        <div id="menu-container" class="menu-closed">
+            <!-- Drawer handle (visible when menu is closed) -->
+            <div id="drawer-handle">
+                <div class="drawer-handle-bar"></div>
+                <div class="drawer-handle-bar"></div>
+            </div>
+
+            <!-- Close Handle (visible when menu is open) -->
+            <div id="close-handle" data-action="closeMenu" title="Close Menu">
+                <svg class="close-handle-chevron" viewBox="0 0 40 10" xmlns="http://www.w3.org/2000/svg">
+                    <polyline points="4,2 20,8 36,2" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+
+            <!-- Menu Panel -->
+            <div id="menu-panel">
+
+
+            <!-- Main Row -->
+            <div class="main-row">
+                <!-- Brush Size Column -->
+                <div class="brush-column">
+                    <div class="section-label">Size</div>
+                    <button class="menu-btn" data-action="increaseBrushSize" title="Increase brush size ([)">
+                        <span class="icon">∧</span>
+                    </button>
+                    <div class="brush-size-display" title="Drag to adjust brush size">
+                        <div class="drag-chevrons up">
+                            <span>›</span>
+                            <span>›</span>
+                        </div>
+                        <div class="brush-size-display-inner">
+                          <div class="brush-preview"></div>
+                          <span class="brush-size-label">1</span>
+                        </div>
+                        <div class="drag-chevrons down">
+                            <span>›</span>
+                            <span>›</span>
+                        </div>
+                    </div>
+                    <button class="menu-btn" data-action="decreaseBrushSize" title="Decrease brush size (])">
+                        <span class="icon">∨</span>
+                    </button>
+                </div>
+
+                <!-- Movement Section -->
+                <div class="movement-section">
+                              <!-- Global Buttons Row -->
+                    <div class="global-row">
+                        <button class="menu-btn" id="btn-manual-mode" data-action="toggleManualMode" title="Toggle Manual Mode (X)">
+                            <span class="icon">✎</span>
+                        </button>
+                        <button class="menu-btn" id="btn-global-reset" data-action="globalReset" title="Global Reset">
+                            <span class="icon">⟲</span>
+                        </button>
+                        <button class="menu-btn" id="btn-record-gif" data-action="recordVideo" title="Record Video (R)">
+                            <span class="icon">●</span>
+                        </button>
+                    </div>
+                    
+                    <div class="section-label">Movement</div>
+                    <div class="cross-container">
+                        <!-- Row 1 -->
+                        <button class="menu-btn" data-action="trickle" title="Trickle (T)">
+                            <span class="icon" style="display:inline-block;transform:rotate(90deg)">≈</span>
+                        </button>
+                        <button class="menu-btn arrow-btn" data-action="waterfallUp" title="Waterfall Up (↑)">
+                            <span class="icon">⤊</span>
+                        </button>
+                        <button class="menu-btn" data-action="shuffle" title="Shuffle (S)">
+                            <span class="icon">≈</span>
+                        </button>
+                        <!-- Row 2 -->
+                        <button class="menu-btn arrow-btn" data-action="moveLeft" title="Move Left (←)">
+                            <span class="icon">←</span>
+                        </button>
+                        <button class="menu-btn" id="btn-pause" data-action="toggleGlobalFreeze" title="Pause (Space)">
+                            <span class="icon">⏸︎</span>
+                        </button>
+                        <button class="menu-btn arrow-btn" data-action="moveRight" title="Move Right (→)">
+                            <span class="icon">→</span>
+                        </button>
+                        <!-- Row 3 -->
+                      
+                        <button
+                          class="menu-btn"
+                          data-action="eraseMovement"
+                          title="Erase Movement (E cycles erase)"
+                        >
+                          <span class="icon">⌫</span>
+                        </button>
+                        <button class="menu-btn arrow-btn" data-action="waterfallDown" title="Waterfall Down (↓)">
+                            <span class="icon">⤋</span>
+                        </button>
+                        <button class="menu-btn" data-action="freezeBrush" title="Freeze Movement (F)">
+                            <span class="icon">❄︎</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Paint Section -->
+                <div class="paint-section">
+                    <div class="section-label">Paint</div>
+                    <div class="paint-column">
+                        <button class="menu-btn" data-action="drawSpace" title="Space (O)">
+                            <span class="icon">○</span>
+                        </button>
+                        <button class="menu-btn" data-action="drawGem" title="Gem (G)">
+                            <span class="icon">◆</span>
+                        </button>
+                        <button class="menu-btn" data-action="drawStatic" title="Static (D)">
+                            <span class="icon">⁘</span>
+                        </button>
+                        <button class="menu-btn" data-action="resetInitialMovement" title="Erase Paint (E cycles erase)">
+                            <span class="icon">↺</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
