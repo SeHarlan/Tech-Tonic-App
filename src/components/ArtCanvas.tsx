@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { createEngine, type Engine } from '../engine/renderer';
+import { MenuDrawer } from './MenuDrawer';
 
 function toCanvasCoords(
   e: React.PointerEvent<HTMLCanvasElement>,
@@ -65,6 +66,7 @@ export function ArtCanvas() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       />
+      <MenuDrawer engine={engineRef.current} />
     </div>
   );
 }
