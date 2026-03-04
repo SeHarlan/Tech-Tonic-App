@@ -22,8 +22,6 @@ export function normalizeSeed(seedValue: number): number {
 
 // --- Weighted Random ---
 
-type WeightEntry = [value: unknown, weight: number];
-
 export function weightedRandom<T>(
   weights: [T, number][],
   rng: () => number = Math.random,

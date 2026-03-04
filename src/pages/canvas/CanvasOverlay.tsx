@@ -1,4 +1,5 @@
 import { MenuButton } from '../../components/ui/MenuButton';
+import { WalletButton } from '../../components/ui/WalletButton';
 import { useNavigate } from 'react-router';
 import './canvas-overlay.css';
 
@@ -21,6 +22,7 @@ export function CanvasOverlay({ canvasBottom, onClose }: CanvasOverlayProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <MenuButton onClick={onClose}>Close</MenuButton>
+        <WalletButton />
         <MenuButton onClick={() => navigate('/mint')}>Mint</MenuButton>
       </div>
     </div>

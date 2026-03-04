@@ -39,11 +39,12 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   const o = opts || {};
 
   // ---- DOM refs ----
-  const menuContainer = document.getElementById('menu-container');
-  if (!menuContainer) {
+  const menuContainerResult = document.getElementById('menu-container');
+  if (!menuContainerResult) {
     console.warn('menu.ts: #menu-container not found');
     return null;
   }
+  const menuContainer: HTMLElement = menuContainerResult;
 
   // ---- State ----
   const state: MenuState = {

@@ -2,7 +2,7 @@ import type { EngineConfig, EngineState, ShaderParams, DrawMode, Direction, Eras
 import { mainVert, mainFrag, displayVert, displayFrag, blockNoiseVert, blockNoiseFrag, noiseVolumeVert, noiseVolumeFrag } from './shaders';
 import { randomizeShaderParameters, normalizeSeed, SEED_MODULUS } from './parameters';
 import { createDrawingManager, type DrawingManager } from './drawing';
-import { captureScreenshot, captureScreenshotBase64, createVideoRecorder, type VideoRecorder } from './recording';
+import { captureScreenshot, captureScreenshotBase64, createVideoRecorder } from './recording';
 import { serializeState, loadStateIntoTextures, type SerializedState } from './state';
 
 // --- Constants ---
@@ -102,6 +102,7 @@ export interface Engine {
 
   serializeState(): Promise<SerializedState>;
   loadState(state: EngineState): Promise<void>;
+  loadSession(seed: number, totalFrameCount: number, imageUrl: string): Promise<void>;
 
   getDrawingManager(): DrawingManager;
 
@@ -138,11 +139,12 @@ export function createEngine(config: EngineConfig): Engine {
 
   // --- WebGL2 Context ---
 
-  const gl = canvas.getContext('webgl2', {
+  const glResult = canvas.getContext('webgl2', {
     preserveDrawingBuffer: true,
     antialias: false,
   });
-  if (!gl) throw new Error('WebGL2 not supported');
+  if (!glResult) throw new Error('WebGL2 not supported');
+  const gl: WebGL2RenderingContext = glResult;
 
   canvas.width = FIXED_CANVAS_WIDTH;
   canvas.height = FIXED_CANVAS_HEIGHT;
@@ -757,6 +759,46 @@ export function createEngine(config: EngineConfig): Engine {
 
       rebuildBlockNoiseFBO(params.blockingScale);
       generateNoiseVolume();
+    },
+
+    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string) {
+      // Set seed & recompute params
+      seed = normalizeSeed(newSeed);
+      params = randomizeShaderParameters(seed);
+
+      // Set time
+      totalFrameCount = newTotalFrameCount;
+      time = totalFrameCount / targetFps;
+
+      // Load PNG into an HTMLImageElement
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.crossOrigin = 'anonymous';
+        el.onload = () => resolve(el);
+        el.onerror = reject;
+        el.src = imageUrl;
+      });
+
+      // Load image into both ping-pong framebuffer textures
+      for (const tex of ppTextures) {
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      }
+
+      // Clear movement and paint textures (no drawing data to restore)
+      const blank = new Uint8Array(canvas.width * canvas.height * 4);
+      gl.bindTexture(gl.TEXTURE_2D, drawing.getMovementTexture());
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
+      gl.bindTexture(gl.TEXTURE_2D, drawing.getPaintTexture());
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+
+      // Rebuild dependent resources
+      rebuildBlockNoiseFBO(params.blockingScale);
+      generateNoiseVolume();
+
+      // Clear pointer state
+      isPointerDown = false;
     },
 
     getDrawingManager() { return drawing; },

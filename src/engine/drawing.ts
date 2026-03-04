@@ -217,8 +217,9 @@ export function createDrawingManager(
   width: number,
   height: number,
 ): DrawingManager {
-  const drawProg = setupDrawProgram(gl);
-  if (!drawProg) throw new Error('Failed to create drawing program');
+  const drawProgResult = setupDrawProgram(gl);
+  if (!drawProgResult) throw new Error('Failed to create drawing program');
+  const prog: DrawProgram = drawProgResult;
 
   const vertexBuffer = gl.createBuffer()!;
 
@@ -292,7 +293,7 @@ export function createDrawingManager(
     const blockingScale = opts.blockingScale ?? 128;
 
     // Snap position to grid in blocking mode
-    let radiusX = brushSize;
+    const radiusX = brushSize;
     let radiusY = brushSize;
     if (blocking) {
       const blockWidthPx = canvasWidth / blockingScale;
@@ -320,26 +321,26 @@ export function createDrawingManager(
       left, bottom, right, bottom, left, top, right, top,
     ]);
 
-    gl.useProgram(drawProg.program);
+    gl.useProgram(prog.program);
     gl.viewport(0, 0, canvasWidth, canvasHeight);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
-    gl.enableVertexAttribArray(drawProg.attribLocations.position);
+    gl.enableVertexAttribArray(prog.attribLocations.position);
     gl.vertexAttribPointer(
-      drawProg.attribLocations.position, 2, gl.FLOAT, false, 0, 0,
+      prog.attribLocations.position, 2, gl.FLOAT, false, 0, 0,
     );
 
-    gl.uniform2f(drawProg.uniformLocations.resolution, canvasWidth, canvasHeight);
-    gl.uniform2f(drawProg.uniformLocations.center, x, y);
-    gl.uniform2f(drawProg.uniformLocations.radius, radiusX, radiusY);
-    gl.uniform1f(drawProg.uniformLocations.squareMode, blocking ? 1.0 : 0.0);
+    gl.uniform2f(prog.uniformLocations.resolution, canvasWidth, canvasHeight);
+    gl.uniform2f(prog.uniformLocations.center, x, y);
+    gl.uniform2f(prog.uniformLocations.radius, radiusX, radiusY);
+    gl.uniform1f(prog.uniformLocations.squareMode, blocking ? 1.0 : 0.0);
 
     const eraseVariant = opts.eraseVariant ?? 'both';
     const waterfallVariant = opts.waterfallVariant ?? true;
 
     if (mode === 'erase') {
-      gl.uniform3f(drawProg.uniformLocations.color, 0.0, 0.0, 0.0);
+      gl.uniform3f(prog.uniformLocations.color, 0.0, 0.0, 0.0);
 
       if (eraseVariant === 'movement' || eraseVariant === 'both') {
         gl.colorMask(true, true, true, true);
@@ -353,7 +354,7 @@ export function createDrawingManager(
       }
     } else if (movementMode) {
       const color = getMovementColor(mode, direction, waterfallVariant);
-      gl.uniform3f(drawProg.uniformLocations.color, color[0], color[1], color[2]);
+      gl.uniform3f(prog.uniformLocations.color, color[0], color[1], color[2]);
 
       // Channel isolation: R for horizontal, G for vertical, B always
       const writeR = mode === 'shuffle' || mode === 'move';
@@ -365,12 +366,12 @@ export function createDrawingManager(
 
       // Movement also clears paint
       gl.colorMask(true, false, false, true);
-      gl.uniform3f(drawProg.uniformLocations.color, 0.0, 0.0, 0.0);
+      gl.uniform3f(prog.uniformLocations.color, 0.0, 0.0, 0.0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, paintFbo);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     } else if (paintMode) {
       const color = getPaintColor(mode);
-      gl.uniform3f(drawProg.uniformLocations.color, color[0], color[1], color[2]);
+      gl.uniform3f(prog.uniformLocations.color, color[0], color[1], color[2]);
       gl.colorMask(true, false, false, true);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, paintFbo);
@@ -468,7 +469,7 @@ export function createDrawingManager(
       gl.deleteTexture(paintTex);
       gl.deleteFramebuffer(paintFbo);
       gl.deleteBuffer(vertexBuffer);
-      gl.deleteProgram(drawProg.program);
+      gl.deleteProgram(prog.program);
     },
   };
 }
