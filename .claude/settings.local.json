@@ -15,7 +15,9 @@
       "WebSearch",
       "WebFetch(domain:lucide.dev)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:pixelarticons.com)"
+      "WebFetch(domain:pixelarticons.com)",
+      "WebFetch(domain:developers.metaplex.com)",
+      "WebFetch(domain:docs.irys.xyz)"
     ]
   }
 }

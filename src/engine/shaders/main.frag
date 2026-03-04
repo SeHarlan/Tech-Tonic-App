@@ -91,9 +91,7 @@ float random(vec2 st) {
 // The texture stores random3D values at integer grid points with LINEAR filtering
 // providing trilinear interpolation (approximating the original cubic Hermite)
 float structuralNoise(vec2 st, float t) {
-    // Apply the same seed offset that noise3D originally applied
     vec3 p = vec3(st, t) + vec3(u_seed * 13.591, u_seed * 7.123, 0.0);
-    // Map to texture coordinates: +0.5 aligns integer positions with texel centers
     return texture(u_noiseVolume, (p + 0.5) / vec3(128.0, 128.0, 64.0)).r;
 }
 
@@ -110,8 +108,8 @@ float noise(vec2 st) {
     float c = random(i + vec2(0.0, 1.0));
     float d = random(i + vec2(1.0, 1.0));
 
-    // Smooth interpolation
-    vec2 u = f * f * (3.0 - 2.0 * f); // Cubic Hermite curve
+    // Smooth interpolation — quintic Hermite (C2 continuous, no sharp kinks at grid points)
+    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
 
     // Mix 4 corners percentages
     return mix(mix(a, b, u.x),

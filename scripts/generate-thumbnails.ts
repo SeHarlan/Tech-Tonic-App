@@ -2,6 +2,7 @@ import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { spawn, type ChildProcess } from 'child_process';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
+import { randomizeShaderParameters } from '../src/engine/parameters';
 
 // --- Constants ---
 
@@ -156,11 +157,16 @@ async function main() {
   });
   console.log('Browser launched\n');
 
+  interface NftAttribute {
+    trait_type: string;
+    value: string;
+  }
+
   const metadata: {
     generatedAt: string;
     count: number;
     durationSeconds: number;
-    thumbnails: { filename: string; seed: number; totalFrameCount: number }[];
+    thumbnails: { filename: string; seed: number; totalFrameCount: number; attributes: NftAttribute[] }[];
   } = {
     generatedAt: new Date().toISOString(),
     count: seeds.length,
@@ -219,7 +225,16 @@ async function main() {
       const pngBuffer = Buffer.from(base64.replace(/^data:image\/png;base64,/, ''), 'base64');
       await writeFile(join(args.output, filename), pngBuffer);
 
-      metadata.thumbnails.push({ filename, seed, totalFrameCount });
+      const params = randomizeShaderParameters(seed);
+      const attributes: NftAttribute[] = [
+        { trait_type: 'Seed', value: String(seed) },
+        { trait_type: 'Pattern', value: params.fxWithBlocking ? 'Blocked' : 'Flowing' },
+        { trait_type: 'Block Scale', value: String(params.blockingScale) },
+        { trait_type: 'Waterfall', value: params.defaultWaterfallMode ? 'On' : 'Off' },
+        { trait_type: 'Edge Noise', value: params.blackNoiseEdgeMult === 0 ? 'None' : 'Subtle' },
+      ];
+
+      metadata.thumbnails.push({ filename, seed, totalFrameCount, attributes });
       console.log(`  -> ${filename} (${totalFrameCount} frames)\n`);
     } catch (err) {
       console.error(`  !! Failed for seed ${seed}:`, err instanceof Error ? err.message : err);
