@@ -71,7 +71,7 @@ export function WalletButton() {
   return (
     <>
       {typeof document !== 'undefined' && createPortal(modal, document.body)}
-      <MenuButton disabled={picking} onClick={() => setPicking(true)}>ConnectWallet</MenuButton>
+      <MenuButton disabled={picking} onClick={() => setPicking(true)}>Connect Wallet</MenuButton>
     </>
   )
 }

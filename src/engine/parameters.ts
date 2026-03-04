@@ -94,7 +94,6 @@ export function getMoveShapeScale(
 }
 
 // --- Parameter Randomization ---
-
 export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const rngSeed = normalizeSeed(seedValue);
   const rng = createSeededRNG(rngSeed);
@@ -220,7 +219,9 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const resetThreshold = weightedRandom<number>(
     [
       [0.4, 1],
+      [0.45, 2],
       [0.5, 4],
+      [0.55, 2],
       [0.6, 1],
     ],
     rng,

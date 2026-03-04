@@ -1,12 +1,11 @@
-// import { useState, useRef, useCallback } from 'react';
-// import { createPortal } from 'react-dom';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
 import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import type { Engine } from '../../engine/renderer';
 import './canvas-overlay.css';
-// import { ImageSquareIcon } from '@phosphor-icons/react';
+import { XIcon } from '@phosphor-icons/react';
+import { useMemo } from 'react';
 
 interface CanvasOverlayProps {
   canvasBottom: number;
@@ -14,84 +13,16 @@ interface CanvasOverlayProps {
   engine: Engine | null;
 }
 
-// const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-
-// function ImportImageModal({ onClose, engine }: { onClose: () => void; engine: Engine }) {
-//   const [dragging, setDragging] = useState(false);
-//   const inputRef = useRef<HTMLInputElement>(null);
-
-//   const loadFile = useCallback((file: File) => {
-//     if (!ACCEPTED_TYPES.includes(file.type)) return;
-//     const url = URL.createObjectURL(file);
-//     const img = new Image();
-//     img.onload = () => {
-//       engine.loadMovementBuffer(img);
-//       URL.revokeObjectURL(url);
-//       onClose();
-//     };
-//     img.onerror = () => URL.revokeObjectURL(url);
-//     img.src = url;
-//   }, [engine, onClose]);
-
-//   const onDrop = useCallback((e: React.DragEvent) => {
-//     e.preventDefault();
-//     setDragging(false);
-//     const file = e.dataTransfer.files[0];
-//     if (file) loadFile(file);
-//   }, [loadFile]);
-
-//   const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-//     const file = e.target.files?.[0];
-//     if (file) loadFile(file);
-//   }, [loadFile]);
-
-//   return createPortal(
-//     <div
-//       className="fixed inset-0 z-200 flex items-center justify-center p-6 bg-black/60 box-border"
-//       onClick={onClose}
-//     >
-//       <div
-//         className={cn('wallet-picker', 'relative max-h-[80vh] max-w-full min-w-[280px] w-[320px] overflow-hidden')}
-//         onClick={(e) => e.stopPropagation()}
-//       >
-//         <span className={cn('wallet-picker-scanlines', 'absolute inset-0 overflow-hidden pointer-events-none z-2')} />
-//         <div className="relative z-1 flex flex-col gap-5 items-center py-9 px-4">
-//           <h2 className={cn('wallet-picker-title', 'text-[1.1em] tracking-[0.12em] uppercase m-0')}>
-//             Import Image
-//           </h2>
-//           <div
-//             className={cn(
-//               'import-dropzone',
-//               'w-full h-40 flex items-center justify-center cursor-pointer transition-colors',
-//               dragging && 'import-dropzone-active',
-//             )}
-//             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-//             onDragLeave={() => setDragging(false)}
-//             onDrop={onDrop}
-//             onClick={() => inputRef.current?.click()}
-//           >
-//             <span className="import-dropzone-text text-sm uppercase tracking-wide pointer-events-none">
-//               {dragging ? 'Drop image' : 'Drop image or click to browse'}
-//             </span>
-//             <input
-//               ref={inputRef}
-//               type="file"
-//               accept={ACCEPTED_TYPES.join(',')}
-//               className="hidden"
-//               onChange={onFileChange}
-//             />
-//           </div>
-//           <MenuButton onClick={onClose}>Cancel</MenuButton>
-//         </div>
-//       </div>
-//     </div>,
-//     document.body,
-//   );
-// }
-
-export function CanvasOverlay({ canvasBottom, onClose }: CanvasOverlayProps) {
+export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose }: CanvasOverlayProps) {
   const navigate = useNavigate();
-  // const [showImport, setShowImport] = useState(false);
+
+  const controlBottom = useMemo(() => {
+    const midpoint = _canvasBottom + (window.innerHeight - _canvasBottom) / 2;
+    // panel is ~80px tall, half = 40px
+    const accountForTranslation = 40;
+    const maxTop = window.innerHeight - accountForTranslation - 40;
+    return Math.min(midpoint, maxTop);
+  }, [_canvasBottom]);
 
   return (
     <div
@@ -101,41 +32,60 @@ export function CanvasOverlay({ canvasBottom, onClose }: CanvasOverlayProps) {
       )}
       onClick={onClose}
     >
+      {/* Static scanlines over entire overlay */}
+      <span className="canvas-overlay-scanlines" />
+
+      {/* CRT vignette */}
+      <div className="canvas-overlay-vignette" />
+
+      {/* Glitch bars */}
       <span className="canvas-overlay-glitch canvas-overlay-glitch-a" />
       <span className="canvas-overlay-glitch canvas-overlay-glitch-b" />
       <span className="canvas-overlay-glitch canvas-overlay-glitch-c" />
 
-      {/* {engine && (
-        <MenuButton
-          className="absolute top-4 left-4 z-10 p-2 "
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowImport(true);
-          }}
-        >
-          <ImageSquareIcon size={24} weight="bold" />
-        </MenuButton>
-      )} */}
+      {/* Close button — top right */}
 
-      <div
-        className={cn(
-          "canvas-overlay-menu",
-          "absolute inset-x-0 flex flex-row items-center justify-center gap-6 z-1",
-        )}
-        style={{ top: canvasBottom, bottom: 0 }}
-        onClick={(e) => e.stopPropagation()}
+      <MenuButton
+        onClick={onClose}
+        className="size-9.25 absolute top-4 right-4 z-20"
       >
-        <MenuButton onClick={onClose}>Close</MenuButton>
-        <WalletButton />
-        <MenuButton onClick={() => navigate("/mint")}>Mint</MenuButton>
-      </div>
+        <XIcon weight="bold" className="shrink-0" />
+      </MenuButton>
 
-      {/* {showImport && engine && (
-        <ImportImageModal
-          onClose={() => setShowImport(false)}
-          engine={engine}
-        />
-      )} */}
+      {/* Bottom control bar */}
+      <div
+        className={cn("canvas-overlay-panel", "z-10 px-8 py-4 absolute -translate-y-1/2")}
+        onClick={(e) => e.stopPropagation()}
+        style={{ top: controlBottom }}
+      >
+        {/* Corner brackets */}
+        <span className="canvas-overlay-panel-corner-bl" />
+        <span className="canvas-overlay-panel-corner-br" />
+        <span className="canvas-overlay-panel-corner-tl" />
+        <span className="canvas-overlay-panel-corner-tr" />
+
+        {/* Bar content */}
+        <div className="relative z-1 flex flex-col items-center gap-2">
+          {/* Terminal label */}
+          <p className="-mt-1 canvas-overlay-label text-xs text-[rgba(0,255,128,0.35)] font-mono">
+            System
+          </p>
+
+          {/* Separator */}
+          <div className="canvas-overlay-separator" />
+
+          {/* Buttons row */}
+          <div className="flex flex-row items-center justify-center gap-4 mt-1">
+            <WalletButton />
+            <MenuButton
+              onClick={() => navigate("/mint")}
+              className="canvas-overlay-mint-btn tracking-[0.12em] uppercase"
+            >
+              Mint
+            </MenuButton>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

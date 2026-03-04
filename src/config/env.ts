@@ -9,7 +9,9 @@ export const RPC_ENDPOINT =
     ? 'https://api.mainnet-beta.solana.com'
     : 'https://api.devnet.solana.com');
 
-export const MALLOW_API_BASE = 'https://api.mallow.art';
+// Candy Machine address - set after running create-candy-machine script
+export const CANDY_MACHINE_ADDRESS =
+  import.meta.env.VITE_CANDY_MACHINE_ADDRESS || '';
 
-// Gumball machine address - set after creation on mallow.art
-export const GUMBALL_KEY = import.meta.env.VITE_GUMBALL_KEY || '';
+// Mint price in SOL — keep in sync with scripts/create-candy-machine.ts DEFAULT_PRICE_SOL
+export const MINT_PRICE_SOL = 0.01;

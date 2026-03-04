@@ -17,7 +17,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:pixelarticons.com)",
       "WebFetch(domain:developers.metaplex.com)",
-      "WebFetch(domain:docs.irys.xyz)"
+      "WebFetch(domain:docs.irys.xyz)",
+      "WebFetch(domain:mpl-candy-machine.typedoc.metaplex.com)"
     ]
   }
 }

@@ -42,4 +42,7 @@ Use **Phosphor Icons** (`@phosphor-icons/react`) for all icons in React componen
 - `cn()` utility from `src/utils/ui-helpers.ts` for class merging (clsx + tailwind-merge)
 - Env vars must use `VITE_` prefix; centralized in `src/config/env.ts`
 - GLSL shaders imported as strings via `vite-plugin-glsl`
-- Always ask for a confirmation before writing chinks of code or doing big refactors 
+
+## Agent Directions
+- Always ask for confirmation before writing chinks of code or doing big refactors 
+- Always ask for confirmation before git actions
