@@ -4,7 +4,6 @@ import {
   createGenericFile,
   generateSigner,
   keypairIdentity,
-  percentAmount,
   publicKey,
   some,
   sol,
@@ -13,12 +12,12 @@ import {
   mplCandyMachine,
   create,
   addConfigLines,
-} from '@metaplex-foundation/mpl-candy-machine';
+} from '@metaplex-foundation/mpl-core-candy-machine';
 import {
-  mplTokenMetadata,
-  createNft,
-  TokenStandard,
-} from '@metaplex-foundation/mpl-token-metadata';
+  mplCore,
+  createCollection,
+  ruleSet,
+} from '@metaplex-foundation/mpl-core';
 import { readFile, writeFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
@@ -33,12 +32,11 @@ interface ConfigLine {
 // --- Constants ---
 
 const COLLECTION_NAME = 'TechTonic Season One';
-const COLLECTION_SYMBOL = 'TONIC';
 const COLLECTION_DESCRIPTION =
   'The first TechTonic generative art collection.';
 const NAME_PREFIX = 'TechTonic #';
 const CONFIG_LINES_BATCH_SIZE = 10;
-const SELLER_FEE_BPS = 5; // 5% royalty
+const ROYALTY_BPS = 500; // 5% royalty
 const DEFAULT_PRICE_SOL = 0.01;
 const MINT_LIMIT = 3;
 const ROYALTY_WALLET = 'EZAdWMUWCKSPH6r6yNysspQsZULwT9zZPqQzRhrUNwDX';
@@ -112,7 +110,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('\n=== Candy Machine Creator ===');
+  console.log('\n=== Core Candy Machine Creator ===');
   console.log(`  Config:     ${args.configLines}`);
   console.log(`  Collection: ${args.collectionImage}`);
   console.log(`  Cluster:    ${args.cluster}`);
@@ -132,7 +130,7 @@ async function main() {
   );
   umi.use(keypairIdentity(keypair));
   umi.use(irysUploader());
-  umi.use(mplTokenMetadata());
+  umi.use(mplCore());
   umi.use(mplCandyMachine());
 
   console.log(`  Identity: ${keypair.publicKey}\n`);
@@ -143,8 +141,8 @@ async function main() {
   );
   console.log(`Loaded ${configLines.length} config lines\n`);
 
-  // --- 1. Create Collection NFT ---
-  console.log('Creating collection NFT...');
+  // --- 1. Create Core Collection ---
+  console.log('Creating Core collection...');
 
   // Upload collection image
   const collectionImageBuffer = await readFile(
@@ -163,26 +161,32 @@ async function main() {
   // Upload collection metadata
   const collectionMetadataUri = await umi.uploader.uploadJson({
     name: COLLECTION_NAME,
-    symbol: COLLECTION_SYMBOL,
     description: COLLECTION_DESCRIPTION,
     image: collectionImageUri,
   });
   console.log(`  Collection metadata: ${collectionMetadataUri}`);
 
-  const collectionMint = generateSigner(umi);
-  await createNft(umi, {
-    mint: collectionMint,
-    authority: umi.identity,
+  const collectionSigner = generateSigner(umi);
+  await createCollection(umi, {
+    collection: collectionSigner,
     name: COLLECTION_NAME,
     uri: collectionMetadataUri,
-    sellerFeeBasisPoints: percentAmount(SELLER_FEE_BPS, 2),
-    isCollection: true,
+    plugins: [
+      {
+        type: 'Royalties',
+        basisPoints: ROYALTY_BPS,
+        creators: [
+          { address: publicKey(ROYALTY_WALLET), percentage: 100 },
+        ],
+        ruleSet: ruleSet('None'),
+      },
+    ],
   }).sendAndConfirm(umi, { confirm: { commitment: 'finalized' } });
 
-  console.log(`  Collection mint: ${collectionMint.publicKey}\n`);
+  console.log(`  Collection: ${collectionSigner.publicKey}\n`);
 
-  // --- 2. Create Candy Machine ---
-  console.log('Creating Candy Machine...');
+  // --- 2. Create Core Candy Machine ---
+  console.log('Creating Core Candy Machine...');
 
   // Derive URI prefix from actual data (e.g., https://gateway.irys.xyz/)
   const firstUri = configLines[0].uri;
@@ -205,23 +209,10 @@ async function main() {
   const candyMachine = generateSigner(umi);
   const createBuilder = await create(umi, {
     candyMachine,
-    collectionMint: collectionMint.publicKey,
+    collection: collectionSigner.publicKey,
     collectionUpdateAuthority: umi.identity,
-    tokenStandard: TokenStandard.NonFungible,
-    sellerFeeBasisPoints: percentAmount(SELLER_FEE_BPS, 2),
     itemsAvailable: configLines.length,
-    creators: [
-      {
-        address: umi.identity.publicKey,
-        verified: true,
-        percentageShare: 0,
-      },
-      {
-        address: publicKey(ROYALTY_WALLET),
-        verified: false,
-        percentageShare: 100,
-      },
-    ],
+    isMutable: true,
     configLineSettings: some({
       prefixName: NAME_PREFIX,
       nameLength: maxNameSuffix,
@@ -238,7 +229,7 @@ async function main() {
       mintLimit: some({ id: 1, limit: MINT_LIMIT }),
     },
   });
-  await createBuilder.sendAndConfirm(umi);
+  await createBuilder.sendAndConfirm(umi, { confirm: { commitment: 'finalized' } });
 
   console.log(`  Candy Machine: ${candyMachine.publicKey}\n`);
 
@@ -267,10 +258,11 @@ async function main() {
   // --- 4. Save output ---
   const output = {
     candyMachine: candyMachine.publicKey.toString(),
-    collectionMint: collectionMint.publicKey.toString(),
+    collection: collectionSigner.publicKey.toString(),
     itemsAvailable: configLines.length,
     price: args.price,
     cluster: args.cluster,
+    standard: 'core',
     createdAt: new Date().toISOString(),
   };
 
@@ -279,9 +271,10 @@ async function main() {
 
   console.log(`\n=== Done ===`);
   console.log(`  Candy Machine: ${candyMachine.publicKey}`);
-  console.log(`  Collection:    ${collectionMint.publicKey}`);
+  console.log(`  Collection:    ${collectionSigner.publicKey}`);
   console.log(`  Items:         ${configLines.length}`);
   console.log(`  Price:         ${args.price} SOL`);
+  console.log(`  Royalties:     ${ROYALTY_BPS / 100}% (enforced via Core plugin)`);
   console.log(`  Guards:        solPayment, mintLimit(${MINT_LIMIT}), botTax`);
   console.log(`  Output:        ${outputPath}`);
   console.log(

@@ -11,9 +11,10 @@ interface CanvasOverlayProps {
   canvasBottom: number;
   onClose: () => void;
   engine: Engine | null;
+  title?: string;
 }
 
-export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose }: CanvasOverlayProps) {
+export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose, title = 'Scratch Pad' }: CanvasOverlayProps) {
   const navigate = useNavigate();
 
   const controlBottom = useMemo(() => {
@@ -68,7 +69,12 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose }: CanvasOv
         <div className="relative z-1 flex flex-col items-center gap-2">
           {/* Terminal label */}
           <p className="-mt-1 canvas-overlay-label text-xs text-[rgba(0,255,128,0.35)] font-mono">
-            System
+            - System -
+          </p>
+
+          {/* Title */}
+          <p className="canvas-overlay-label font-display text-sm tracking-widest uppercase text-[rgba(0,255,128,0.7)]">
+            {title}
           </p>
 
           {/* Separator */}

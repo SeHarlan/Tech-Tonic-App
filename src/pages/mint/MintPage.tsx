@@ -8,10 +8,10 @@ import {
   some,
 } from '@metaplex-foundation/umi';
 import {
-  mintV2,
+  mintV1,
   fetchCandyMachine,
   fetchCandyGuard,
-} from '@metaplex-foundation/mpl-candy-machine';
+} from '@metaplex-foundation/mpl-core-candy-machine';
 import { setComputeUnitLimit } from '@metaplex-foundation/mpl-toolbox';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
@@ -48,17 +48,15 @@ export function MintPage() {
         ? solPaymentGuard.value.destination
         : undefined;
 
-      const nftMint = generateSigner(umi);
+      const asset = generateSigner(umi);
 
       await transactionBuilder()
         .add(setComputeUnitLimit(umi, { units: 800_000 }))
         .add(
-          mintV2(umi, {
+          mintV1(umi, {
             candyMachine: cmPublicKey,
-            nftMint,
-            collectionMint: candyMachine.collectionMint,
-            collectionUpdateAuthority: candyMachine.authority,
-            tokenStandard: candyMachine.tokenStandard,
+            asset,
+            collection: candyMachine.collectionMint,
             mintArgs: {
               solPayment: solPaymentDest
                 ? some({ destination: solPaymentDest })

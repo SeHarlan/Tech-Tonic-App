@@ -23,6 +23,7 @@ export function CanvasPage() {
   const [engine, setEngine] = useState<Engine | null>(null);
   // const [fps, setFps] = useState(0);
   const [showOverlay, setShowOverlay] = useState(false);
+  const [artworkTitle, _setArtworkTitle] = useState<string | undefined>();
 
   const [canvasBottom, setCanvasBottom] = useState(0);
 
@@ -88,7 +89,7 @@ export function CanvasPage() {
       <MenuDrawer ref={menuDrawerRef} engine={engine} onAppMenu={toggleOverlay} hidden={showOverlay} />
 
       {showOverlay && (
-        <CanvasOverlay canvasBottom={canvasBottom} onClose={() => setShowOverlay(false)} engine={engine} />
+        <CanvasOverlay canvasBottom={canvasBottom} onClose={() => setShowOverlay(false)} engine={engine} title={artworkTitle} />
       )}
     </div>
   );

@@ -19,6 +19,8 @@
     "@fontsource/rajdhani": "^5.2.7",
     "@fontsource/share-tech-mono": "^5.2.7",
     "@metaplex-foundation/mpl-candy-machine": "^6.1.0",
+    "@metaplex-foundation/mpl-core": "^1.7.0",
+    "@metaplex-foundation/mpl-core-candy-machine": "^0.3.0",
     "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
     "@metaplex-foundation/mpl-toolbox": "^0.10.0",
     "@metaplex-foundation/umi": "^1.5.1",

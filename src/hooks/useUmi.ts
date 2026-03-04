@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { mplCandyMachine } from '@metaplex-foundation/mpl-candy-machine';
+import { mplCandyMachine } from '@metaplex-foundation/mpl-core-candy-machine';
+import { mplCore } from '@metaplex-foundation/mpl-core';
 import {
   signerIdentity,
   publicKey,
@@ -66,6 +67,7 @@ export function useUmi() {
 
   return useMemo(() => {
     const umi = createUmi(RPC_ENDPOINT);
+    umi.use(mplCore());
     umi.use(mplCandyMachine());
 
     if (address && walletSigner) {
