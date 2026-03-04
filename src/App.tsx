@@ -1,18 +1,17 @@
 import { BrowserRouter, Routes, Route } from 'react-router';
-import { WalletProvider } from './providers/WalletProvider';
 import { CanvasPage } from './pages/canvas';
 import { MintPage } from './pages/mint';
+import { GeneratePage } from './pages/generate';
 
 function App() {
   return (
-    <WalletProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<CanvasPage />} />
-          <Route path="/mint" element={<MintPage />} />
-        </Routes>
-      </BrowserRouter>
-    </WalletProvider>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<CanvasPage />} />
+        <Route path="/mint" element={<MintPage />} />
+        {import.meta.env.DEV && <Route path="/generate" element={<GeneratePage />} />}
+      </Routes>
+    </BrowserRouter>
   );
 }
 

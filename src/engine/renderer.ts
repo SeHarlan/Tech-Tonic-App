@@ -121,6 +121,7 @@ export interface Engine {
 
   getParams(): ShaderParams;
   getTime(): number;
+  getTotalFrameCount(): number;
   isRunning(): boolean;
 
   captureScreenshot(): void;
@@ -842,6 +843,7 @@ export function createEngine(config: EngineConfig): Engine {
 
     getParams() { return params; },
     getTime() { return time; },
+    getTotalFrameCount() { return totalFrameCount; },
     isRunning() { return running; },
 
     captureScreenshot() {

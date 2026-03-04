@@ -12,7 +12,7 @@ export function MenuButton({ active, children, className, ...props }: MenuButton
       style={{ width: 'auto', padding: '0 24px' }}
       {...props}
     >
-      <span className="icon">{children}</span>
+      {children}
     </button>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useConnector, useAccount } from '@solana/connector';
 import { MenuButton } from './MenuButton';
+import { cn } from '../../utils/ui-helpers';
 
 const FALLBACK_WALLETS = [
   { name: 'Phantom', url: 'https://phantom.app/' },
@@ -10,47 +11,51 @@ const FALLBACK_WALLETS = [
 
 export function WalletButton() {
   const [picking, setPicking] = useState(false);
-  const { wallets, select, disconnect, connected, connecting } = useConnector();
+  const { connectors, connectWallet, disconnectWallet, isConnected, isConnecting } =
+    useConnector();
   const { formatted } = useAccount();
 
-  if (connecting) {
+  if (isConnecting) {
     return <MenuButton disabled>Connecting...</MenuButton>;
   }
 
-  if (connected) {
+  if (isConnected) {
     return (
-      <>
-        <MenuButton disabled className="wallet-address">
-          {formatted}
-        </MenuButton>
-        <MenuButton onClick={() => disconnect()}>Disconnect</MenuButton>
-      </>
+      <MenuButton
+        onClick={() => disconnectWallet()}
+        className="wallet-address"
+      >
+        {formatted}
+      </MenuButton>
     );
   }
 
-  if (picking) {
-    return (
-      <div className="wallet-picker-backdrop" onClick={() => setPicking(false)}>
-        <div className="wallet-picker" onClick={(e) => e.stopPropagation()}>
-          <span className="wallet-picker-scanlines" />
-          <div className="wallet-picker-content">
-            <h2 className="wallet-picker-title">Connect Wallet</h2>
-            <div className="wallet-picker-list">
-              {wallets.length > 0
-                ? wallets.map((w) => (
+  return (
+    <>
+      {picking && (
+        <div className="fixed inset-0 z-700 flex items-center justify-center p-6 bg-black/60 box-border" onClick={() => setPicking(false)}>
+        <div className={cn('wallet-picker', 'relative max-h-[80vh] max-w-full min-w-[280px] overflow-x-hidden overflow-y-auto')} onClick={(e) => e.stopPropagation()}>
+          <span className={cn('wallet-picker-scanlines', 'absolute inset-0 overflow-hidden pointer-events-none z-2')} />
+          <div className="relative z-1 flex flex-col gap-5 items-center py-9 px-4">
+            <h2 className={cn('wallet-picker-title', 'text-[1.1em] tracking-[0.12em] uppercase m-0')}>Connect Wallet</h2>
+            <div className="flex flex-col gap-4 items-stretch w-full py-5 px-10">
+              {connectors.length > 0
+                ? connectors.map((c) => (
                     <MenuButton
-                      key={w.wallet.name}
+                      key={c.id}
+                      className="w-full box-border block! truncate"
                       onClick={async () => {
-                        await select(w.wallet.name);
+                        await connectWallet(c.id);
                         setPicking(false);
                       }}
                     >
-                      {w.wallet.name}
+                      {c.name}
                     </MenuButton>
                   ))
                 : FALLBACK_WALLETS.map((fw) => (
                     <MenuButton
                       key={fw.name}
+                      className="w-full box-border"
                       onClick={() => window.open(fw.url, '_blank')}
                     >
                       Get {fw.name}
@@ -61,8 +66,8 @@ export function WalletButton() {
           </div>
         </div>
       </div>
-    );
-  }
-
-  return <MenuButton onClick={() => setPicking(true)}>ConnectWallet</MenuButton>;
+      )}
+      <MenuButton disabled={picking} onClick={() => setPicking(true)}>ConnectWallet</MenuButton>
+    </>
+  )
 }
