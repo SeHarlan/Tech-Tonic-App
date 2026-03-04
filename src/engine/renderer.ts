@@ -124,6 +124,8 @@ export interface Engine {
   getTotalFrameCount(): number;
   isRunning(): boolean;
 
+  loadMovementBuffer(image: HTMLImageElement): void;
+
   captureScreenshot(): void;
   captureScreenshotBase64(): Promise<string>;
   startRecording(): void;
@@ -683,8 +685,22 @@ export function createEngine(config: EngineConfig): Engine {
 
     setSeed(newSeed: number) {
       applySeed(newSeed);
+
+      // Clear both ping-pong framebuffers completely
+      for (let i = 0; i < 2; i++) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[i]);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // Clear drawing buffers (movement + paint)
+      drawing.clearAll();
+
+      // Reset time and pointer state
       time = 0;
       totalFrameCount = 0;
+      isPointerDown = false;
     },
     getSeed() { return seed; },
 
@@ -800,6 +816,21 @@ export function createEngine(config: EngineConfig): Engine {
 
       // Clear pointer state
       isPointerDown = false;
+    },
+
+    loadMovementBuffer(image: HTMLImageElement) {
+      // Flip vertically: WebGL uses bottom-left origin, images use top-left
+      const flipCanvas = document.createElement('canvas');
+      flipCanvas.width = canvas.width;
+      flipCanvas.height = canvas.height;
+      const ctx = flipCanvas.getContext('2d')!;
+      ctx.translate(0, flipCanvas.height);
+      ctx.scale(1, -1);
+      ctx.drawImage(image, 0, 0, flipCanvas.width, flipCanvas.height);
+
+      gl.bindTexture(gl.TEXTURE_2D, drawing.getMovementTexture());
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flipCanvas);
+      gl.bindTexture(gl.TEXTURE_2D, null);
     },
 
     getDrawingManager() { return drawing; },

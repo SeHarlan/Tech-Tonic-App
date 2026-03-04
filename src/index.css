@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+/* ── App-wide font defaults (engine/ui stays on Courier New) ── */
+@theme {
+  --font-display: 'Rajdhani', sans-serif;
+  --font-mono: 'Share Tech Mono', monospace;
+}
+
+body {
+  font-family: var(--font-display);
+}

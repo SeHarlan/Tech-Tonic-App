@@ -79,7 +79,7 @@ export function CanvasPage() {
     <div className="fixed inset-0 bg-black flex items-center justify-center">
       <canvas
         ref={canvasRef}
-        className={cn('max-h-full max-w-full object-contain touch-none transition-transform duration-500 ease-in-out', showOverlay && 'canvas-overlay-glow')}
+        className={cn('z-100 max-h-full max-w-full object-contain touch-none transition-transform duration-500 ease-in-out', showOverlay && 'canvas-overlay-glow')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -88,7 +88,7 @@ export function CanvasPage() {
       <MenuDrawer ref={menuDrawerRef} engine={engine} onAppMenu={toggleOverlay} hidden={showOverlay} />
 
       {showOverlay && (
-        <CanvasOverlay canvasBottom={canvasBottom} onClose={() => setShowOverlay(false)} />
+        <CanvasOverlay canvasBottom={canvasBottom} onClose={() => setShowOverlay(false)} engine={engine} />
       )}
     </div>
   );

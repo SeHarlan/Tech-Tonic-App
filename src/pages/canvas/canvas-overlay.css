@@ -63,7 +63,8 @@
 .canvas-overlay-glitch-c { animation: overlay-glitch-d 9.7s steps(1) infinite; }
 
 /* Glow on overlay buttons */
-.canvas-overlay-menu .menu-btn {
+.canvas-overlay-menu button,
+.wallet-picker button {
   box-shadow:
     0 0 8px rgba(0, 255, 128, 0.6),
     0 0 20px rgba(0, 255, 128, 0.3),
@@ -71,7 +72,7 @@
   animation: canvas-glow-pulse 6s steps(1) infinite;
 }
 
-/* Button container — parent selector for .canvas-overlay-menu .menu-btn */
+/* Button container — parent selector for .canvas-overlay-menu button */
 .canvas-overlay-menu {}
 
 /* Background flicker — more transparent version of pip-bg */
@@ -217,6 +218,23 @@
   border: 1px solid rgba(0, 255, 128, 0.5);
   transform: scale(0.8);
   animation: canvas-glow-pulse 7s steps(1) infinite;
+}
+
+/* ===== IMPORT IMAGE DROPZONE ===== */
+.import-dropzone {
+  border: 1px dashed rgba(0, 255, 128, 0.35);
+  background: rgba(0, 255, 128, 0.03);
+}
+
+.import-dropzone:hover,
+.import-dropzone-active {
+  border-color: rgba(0, 255, 128, 0.6);
+  background: rgba(0, 255, 128, 0.08);
+}
+
+.import-dropzone-text {
+  color: rgba(0, 255, 128, 0.65);
+  text-shadow: 0 0 6px rgba(0, 255, 128, 0.3);
 }
 
 @keyframes canvas-glow-pulse {

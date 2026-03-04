@@ -25,6 +25,16 @@ Everything in `src/engine/` must be:
 - Engine UI (`src/engine/ui/`) uses raw HTML + vanilla JS injected via `?raw` imports — not React components
 - Engine must be cleaned up: call `engine.destroy()` in `useEffect` return
 
+## Fonts
+Self-hosted via **Fontsource** (no Google Fonts CDN). CSS vars defined in `src/index.css`:
+- **Display/headings**: `var(--font-display)` → Rajdhani (weights 300–700)
+- **Mono/UI text**: `var(--font-mono)` → Share Tech Mono
+- `src/engine/ui/` — stays on `'Courier New', monospace` (zero-dependency rule)
+
+## Icons
+Use **Phosphor Icons** (`@phosphor-icons/react`) for all icons in React components. Exception:
+- `src/engine/ui/` — continues using Unicode symbols (zero-dependency rule)
+
 ## Project Conventions
 - Pages use barrel exports (`src/pages/canvas/index.ts` re-exports `CanvasPage`)
 - CSS co-located with components; engine CSS lives in `src/engine/ui/`
@@ -32,3 +42,4 @@ Everything in `src/engine/` must be:
 - `cn()` utility from `src/utils/ui-helpers.ts` for class merging (clsx + tailwind-merge)
 - Env vars must use `VITE_` prefix; centralized in `src/config/env.ts`
 - GLSL shaders imported as strings via `vite-plugin-glsl`
+- Always ask for a confirmation before writing chinks of code or doing big refactors 

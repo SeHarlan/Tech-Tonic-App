@@ -114,7 +114,6 @@
     justify-content: center;
     transition: all 0.1s ease;
 }
-
 .menu-btn:hover {
     background: rgba(0, 40, 20, 0.95);
     border-color: rgba(0, 255, 128, 0.7);

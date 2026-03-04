@@ -12,7 +12,10 @@
       "Bash(npx tsc --noEmit 2>&1 | head -30)",
       "Bash(npx tsc --noEmit --pretty 2>&1 | grep -i \"MenuDrawer\" | head -20)",
       "Bash(npx tsc -b --noEmit 2>&1)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:lucide.dev)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pixelarticons.com)"
     ]
   }
 }
