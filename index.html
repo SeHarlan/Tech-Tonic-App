@@ -6,8 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>tech-tonic-app</title>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="background:radial-gradient(ellipse at center,rgba(0,40,20,0.4) 0%,#000804 70%);background-color:#000804;min-height:100vh;min-height:100dvh;margin:0">
+    <div id="root">
+      <div id="app-loader" style="display:flex;align-items:center;justify-content:center;height:100vh;height:100dvh">
+        <style>
+          @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+          #app-loader span{font-family:'Share Tech Mono',monospace;color:rgba(0,255,128,0.8);font-size:1.1rem;animation:pulse 1.4s ease-in-out infinite;letter-spacing:.15em}
+        </style>
+        <span>INITIALIZING...</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
