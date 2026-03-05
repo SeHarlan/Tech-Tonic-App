@@ -404,7 +404,7 @@ export function createEngine(config: EngineConfig): Engine {
   // Drawing input state
   let drawMode: DrawMode = 'waterfall';
   let direction: Direction = 'down';
-  let waterfallVariant = false;
+  let waterfallVariant = params.defaultWaterfallMode;
   let eraseVariant: EraseVariant = 'movement';
   let isPointerDown = false;
   let lastPointerX = 0;
