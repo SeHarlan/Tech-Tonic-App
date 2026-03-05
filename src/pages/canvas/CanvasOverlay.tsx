@@ -29,7 +29,7 @@ function indexFromId(list: NftItem[], id: string | null): number {
 interface CanvasOverlayProps {
   canvasBottom: number;
   engine: Engine | null;
-  onClose: (selectedNft?: NftItem) => void;
+  onClose: () => void;
   showTouchPrompt?: boolean;
 }
 
@@ -76,14 +76,6 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     return Math.max(midpoint, minTop);
   }, [_canvasBottom]);
 
-  const handleClose = useCallback(() => {
-    if (activeTab !== 'sketch' && currentNft) {
-      onClose(currentNft);
-    } else {
-      onClose();
-    }
-  }, [activeTab, currentNft, onClose]);
-
   const handleTabChange = useCallback((tab: OverlayTab) => {
     setOverlayTab(tab);
     if (!engine) return;
@@ -114,7 +106,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
         "canvas-overlay",
         "fixed inset-0 z-50 flex items-end justify-center overflow-hidden",
       )}
-      onClick={handleClose}
+      onClick={onClose}
     >
       {/* Full-screen NFT browser (image + arrows + swipe) — behind overlay effects */}
       {isBrowsing && (
@@ -163,7 +155,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
       {/* Close button — top right */}
       <MenuButton
-        onClick={handleClose}
+        onClick={onClose}
         className="size-9.25 absolute top-4 right-4 z-20"
       >
         <XIcon weight="bold" className="shrink-0" />

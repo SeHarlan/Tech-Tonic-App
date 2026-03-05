@@ -90,8 +90,7 @@ export function CanvasPage() {
     }
   }, [engine, isOverlayOpen, openOverlay, closeOverlay, computeCanvasBottom]);
 
-  const handleOverlayClose = useCallback(
-    (_selectedNft?: NftItem) => {
+  const handleOverlayClose = useCallback(() => {
       closeOverlay();
       // NFT is already loaded into the engine by NftBrowser — just unfreeze
       engine?.setGlobalFreeze(false);
