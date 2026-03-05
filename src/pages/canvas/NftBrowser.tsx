@@ -26,7 +26,7 @@ function renderThenFreeze(engine: Engine) {
 }
 
 export function loadNftIntoEngine(engine: Engine, nft: NftItem) {
-  engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl)
+  engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode)
     .then(() => renderThenFreeze(engine))
     .catch((err) => console.error('Failed to load NFT into engine:', err));
 }

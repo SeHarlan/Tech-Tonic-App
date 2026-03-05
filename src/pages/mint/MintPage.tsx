@@ -28,7 +28,7 @@ import { useRefreshOwned } from '../../hooks/useRefreshOwned';
 import { activeOwnedNftIdAtom, pendingMintLoadAtom } from '../../store/atoms';
 import './mint-page.css';
 
-type MintStatus = 'idle' | 'minting' | 'success' | 'retrieving' | 'error';
+type MintStatus = 'idle' | 'minting' | 'success' | 'error';
 type PaymentMethod = 'sol' | 'skr';
 
 export function MintPage() {
@@ -44,6 +44,7 @@ export function MintPage() {
   const setPendingMintLoad = useSetAtom(pendingMintLoadAtom);
 
   const [status, setStatus] = useState<MintStatus>('idle');
+  const [retrieving, setRetrieving] = useState(false);
   const [error, setError] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('sol');
 
@@ -115,10 +116,11 @@ export function MintPage() {
         .sendAndConfirm(umi);
 
       setStatus('success');
+      setRetrieving(false);
 
-      // Brief "Minted!" display, then transition to retrieving
-      await new Promise((r) => setTimeout(r, 800));
-      setStatus('retrieving');
+      // Brief "Minted!" celebration before starting retrieval
+      await new Promise((r) => setTimeout(r, 1200));
+      setRetrieving(true);
 
       const prevIds = prevOwnedIdsRef.current;
       let finalList = await refreshOwned();
@@ -256,15 +258,16 @@ export function MintPage() {
                 )}
 
                 {status === "success" && (
-                  <p className="mint-status-success text-[rgba(0,255,128,0.9)] font-mono tracking-wide">
-                    Minted!
-                  </p>
-                )}
-
-                {status === "retrieving" && (
-                  <p className="text-[rgba(0,255,128,0.7)] font-mono animate-pulse tracking-widest uppercase">
-                    Retrieving...
-                  </p>
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="mint-status-success text-[rgba(0,255,128,0.9)] font-mono tracking-wide">
+                      Minted!
+                    </p>
+                    {retrieving && (
+                      <p className="text-[rgba(0,255,128,0.4)] font-mono text-xs animate-pulse tracking-widest uppercase">
+                        Retrieving from chain...
+                      </p>
+                    )}
+                  </div>
                 )}
 
                 {status === "error" && (

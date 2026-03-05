@@ -99,10 +99,11 @@ export interface Engine {
   setManualMode(manual: boolean): void;
   isManualMode(): boolean;
   forceReset(): void;
+  hardReset(): void;
 
   serializeState(): Promise<SerializedState>;
   loadState(state: EngineState): Promise<void>;
-  loadSession(seed: number, totalFrameCount: number, imageUrl: string): Promise<void>;
+  loadSession(seed: number, totalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean): Promise<void>;
 
   getDrawingManager(): DrawingManager;
 
@@ -397,6 +398,9 @@ export function createEngine(config: EngineConfig): Engine {
   const targetFps = DEFAULT_TARGET_FPS;
   const frameInterval = 1000 / targetFps;
 
+  // Loaded session snapshot — preserved across forceReset, cleared by hardReset/setSeed
+  let loadedSession: { imageUrl: string; totalFrameCount: number } | null = null;
+
   // Drawing input state
   let drawMode: DrawMode = 'waterfall';
   let direction: Direction = 'down';
@@ -415,7 +419,7 @@ export function createEngine(config: EngineConfig): Engine {
   generateNoiseVolume();
   drawing.generateBrushSizeOptions();
 
-  // --- Apply Seed ---
+  // --- Internal Helpers ---
 
   function applySeed(newSeed: number) {
     seed = normalizeSeed(newSeed);
@@ -423,6 +427,59 @@ export function createEngine(config: EngineConfig): Engine {
     rebuildBlockNoiseFBO(params.blockingScale);
     generateNoiseVolume();
     drawing.generateBrushSizeOptions();
+  }
+
+  /** Clear both ping-pong framebuffers to transparent black. */
+  function clearFramebuffers() {
+    for (let i = 0; i < 2; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[i]);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /** Clear all drawing state and reset time. */
+  function resetDrawingState() {
+    drawing.clearAll();
+    waterfallVariant = params.defaultWaterfallMode;
+    time = 0;
+    totalFrameCount = 0;
+    isPointerDown = false;
+  }
+
+  /** Load an image URL into the ping-pong textures (flipped for WebGL) and clear drawing textures. */
+  function loadImageIntoFramebuffers(imageUrl: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const flipCanvas = document.createElement('canvas');
+        flipCanvas.width = canvas.width;
+        flipCanvas.height = canvas.height;
+        const ctx = flipCanvas.getContext('2d')!;
+        ctx.translate(0, flipCanvas.height);
+        ctx.scale(1, -1);
+        ctx.drawImage(img, 0, 0, flipCanvas.width, flipCanvas.height);
+
+        for (const tex of ppTextures) {
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flipCanvas);
+        }
+
+        // Clear movement and paint textures
+        const blank = new Uint8Array(canvas.width * canvas.height * 4);
+        gl.bindTexture(gl.TEXTURE_2D, drawing.getMovementTexture());
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
+        gl.bindTexture(gl.TEXTURE_2D, drawing.getPaintTexture());
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        resolve();
+      };
+      img.onerror = () => reject(new Error('Failed to load image: ' + imageUrl));
+      img.src = imageUrl;
+    });
   }
 
   // --- Block Noise Render ---
@@ -685,22 +742,9 @@ export function createEngine(config: EngineConfig): Engine {
 
     setSeed(newSeed: number) {
       applySeed(newSeed);
-
-      // Clear both ping-pong framebuffers completely
-      for (let i = 0; i < 2; i++) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[i]);
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-      }
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-      // Clear drawing buffers (movement + paint)
-      drawing.clearAll();
-
-      // Reset time and pointer state
-      time = 0;
-      totalFrameCount = 0;
-      isPointerDown = false;
+      loadedSession = null;
+      clearFramebuffers();
+      resetDrawingState();
     },
     getSeed() { return seed; },
 
@@ -711,26 +755,28 @@ export function createEngine(config: EngineConfig): Engine {
     isManualMode() { return manualModeFlag; },
 
     forceReset() {
+      if (loadedSession) {
+        // Restore to NFT starting point — reload thumbnail and original frame count
+        const { imageUrl, totalFrameCount: origFrameCount } = loadedSession;
+        resetDrawingState();
+        loadImageIntoFramebuffers(imageUrl)
+          .then(() => {
+            totalFrameCount = origFrameCount;
+            time = totalFrameCount / targetFps;
+          })
+          .catch((err) => console.error('Failed to reload NFT thumbnail for reset:', err));
+        return;
+      }
+
       forceResetFlag = true;
       forceResetFrames = 3;
+      clearFramebuffers();
+      resetDrawingState();
+    },
 
-      // Clear drawing buffers (movement + paint)
-      drawing.clearAll();
-
-      // Clear both ping-pong framebuffers
-      for (let i = 0; i < 2; i++) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[i]);
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-      }
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-      // Reset time
-      time = 0;
-      totalFrameCount = 0;
-
-      // Clear pointer state to prevent stuck strokes
-      isPointerDown = false;
+    hardReset() {
+      loadedSession = null;
+      engine.forceReset();
     },
 
     async serializeState() {
@@ -778,52 +824,15 @@ export function createEngine(config: EngineConfig): Engine {
       generateNoiseVolume();
     },
 
-    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string) {
-      // Set seed & recompute params
-      seed = normalizeSeed(newSeed);
-      params = randomizeShaderParameters(seed);
+    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean) {
+      applySeed(newSeed);
+      loadedSession = { imageUrl, totalFrameCount: newTotalFrameCount };
 
-      // Set time
+      await loadImageIntoFramebuffers(imageUrl);
+
       totalFrameCount = newTotalFrameCount;
       time = totalFrameCount / targetFps;
-
-      // Load PNG into an HTMLImageElement
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const el = new Image();
-        el.crossOrigin = 'anonymous';
-        el.onload = () => resolve(el);
-        el.onerror = reject;
-        el.src = imageUrl;
-      });
-
-      // Flip vertically: stored PNGs use top-left origin, WebGL uses bottom-left
-      const flipCanvas = document.createElement('canvas');
-      flipCanvas.width = canvas.width;
-      flipCanvas.height = canvas.height;
-      const ctx = flipCanvas.getContext('2d')!;
-      ctx.translate(0, flipCanvas.height);
-      ctx.scale(1, -1);
-      ctx.drawImage(img, 0, 0, flipCanvas.width, flipCanvas.height);
-
-      // Load flipped image into both ping-pong framebuffer textures
-      for (const tex of ppTextures) {
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flipCanvas);
-      }
-
-      // Clear movement and paint textures (no drawing data to restore)
-      const blank = new Uint8Array(canvas.width * canvas.height * 4);
-      gl.bindTexture(gl.TEXTURE_2D, drawing.getMovementTexture());
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
-      gl.bindTexture(gl.TEXTURE_2D, drawing.getPaintTexture());
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
-      gl.bindTexture(gl.TEXTURE_2D, null);
-
-      // Rebuild dependent resources
-      rebuildBlockNoiseFBO(params.blockingScale);
-      generateNoiseVolume();
-
-      // Clear pointer state
+      waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
       isPointerDown = false;
     },
 

@@ -160,16 +160,18 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
     };
   }, [onMenuAction, onMenuAppMenu]);
 
-  // Sync brush size options from engine when engine changes
+  // Sync engine state into menu when engine changes or menu becomes visible
   useEffect(() => {
-    if (!engine || !menuRef.current) return;
+    if (!engine || !menuRef.current || hidden) return;
     const dm = engine.getDrawingManager();
     menuRef.current.setState({
       brushSizeOptions: dm.getBrushSizeOptions(),
       brushSizeIndex: dm.getBrushSizeIndex(),
       brushSize: dm.getBrushSize(),
+      waterfallVariant: engine.getWaterfallVariant(),
     });
-  }, [engine]);
+  }, [engine, hidden]);
+
 
   return <div ref={wrapperRef} style={hidden ? { visibility: 'hidden' } : undefined} />;
 });

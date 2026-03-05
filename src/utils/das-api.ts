@@ -10,6 +10,7 @@ export interface NftItem {
   name: string;
   seed: number;
   frameCount: number;
+  defaultWaterfallMode: boolean;
   thumbnailUrl: string;
   attributes: NftAttribute[];
 }
@@ -33,6 +34,8 @@ function assetToNftItem(asset: DasAsset): NftItem {
   const seed = seedAttr ? Number(seedAttr.value) : 0;
   const frameCountAttr = attrs.find((a) => a.trait_type === 'Frame Count');
   const frameCount = frameCountAttr ? Number(frameCountAttr.value) : 33 * 60;
+  const waterfallAttr = attrs.find((a) => a.trait_type === 'Waterfall');
+  const defaultWaterfallMode = waterfallAttr ? waterfallAttr.value === 'On' : false;
 
   // Image URL priority — prefer raw gateway URLs for CORS compatibility (needed by
   // WebGL texImage2D with crossOrigin='anonymous'). The Helius CDN proxy does not
@@ -41,6 +44,8 @@ function assetToNftItem(asset: DasAsset): NftItem {
   //  2. files[].uri — raw gateway URL
   //  3. files[].cdn_uri — Helius CDN proxy (fallback; won't work for WebGL cross-origin)
   const imageFile = asset.content.files?.find((f) => f.mime.startsWith('image/'));
+
+  //TODO create a better fallback system, with cdn tried first and fallback to links/image if cdn url fails
   let imageUrl =
     asset.content.links?.image ?? imageFile?.uri ?? imageFile?.cdn_uri ?? '';
 
@@ -55,6 +60,7 @@ function assetToNftItem(asset: DasAsset): NftItem {
     name: asset.content.metadata.name,
     seed,
     frameCount,
+    defaultWaterfallMode,
     thumbnailUrl: imageUrl,
     attributes: attrs,
   };
