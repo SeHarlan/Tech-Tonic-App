@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useConnector, useAccount } from '@solana/connector';
 import {
@@ -6,14 +6,16 @@ import {
   transactionBuilder,
   publicKey,
   some,
-  type OptionOrNullable,
+  unwrapOption,
 } from '@metaplex-foundation/umi';
+import { base58 } from '@metaplex-foundation/umi/serializers';
 import {
   mintV1,
   fetchCandyMachine,
   fetchCandyGuard,
+  type DefaultGuardSetMintArgs,
 } from '@metaplex-foundation/mpl-core-candy-machine';
-import { setComputeUnitLimit } from '@metaplex-foundation/mpl-toolbox';
+import { setComputeUnitLimit, setComputeUnitPrice } from '@metaplex-foundation/mpl-toolbox';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
 import { useUmi } from '../../hooks/useUmi';
@@ -26,6 +28,7 @@ import { useOverlay } from '../../hooks/useOverlay';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useRefreshOwned } from '../../hooks/useRefreshOwned';
 import { activeOwnedNftIdAtom, pendingMintLoadAtom } from '../../store/atoms';
+import { fetchPriorityFee } from '../../utils/das-api';
 import './mint-page.css';
 
 type MintStatus = 'idle' | 'minting' | 'success' | 'error';
@@ -47,6 +50,8 @@ export function MintPage() {
   const [retrieving, setRetrieving] = useState(false);
   const [error, setError] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('sol');
+  const [priceSol, setPriceSol] = useState(MINT_PRICE_SOL);
+  const [priceSkr, setPriceSkr] = useState(MINT_PRICE_SKR);
 
   // Capture owned IDs before minting starts
   const prevOwnedIdsRef = useRef<Set<string>>(new Set());
@@ -55,6 +60,43 @@ export function MintPage() {
   const skrDisabledInDemo = DEMO_MODE && paymentMethod === 'skr';
   const mintEnabled =
     activePhase !== null && !!CANDY_MACHINE_ADDRESS && !skrDisabledInDemo;
+
+  // Fetch live prices from on-chain guard data
+  useEffect(() => {
+    if (!CANDY_MACHINE_ADDRESS) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const cmPk = publicKey(CANDY_MACHINE_ADDRESS);
+        const cm = await fetchCandyMachine(umi, cmPk);
+        const guard = await fetchCandyGuard(umi, cm.mintAuthority);
+
+        if (cancelled) return;
+
+        const publicGroup = guard.groups.find((g) => g.label === 'public');
+        if (publicGroup) {
+          const solPayment = unwrapOption(publicGroup.guards.solPayment);
+          if (solPayment) {
+            setPriceSol(Number(solPayment.lamports.basisPoints) / 1e9);
+          }
+        }
+
+        const skrGroup = guard.groups.find((g) => g.label === 'skr');
+        if (skrGroup) {
+          const tokenPayment = unwrapOption(skrGroup.guards.tokenPayment);
+          if (tokenPayment) {
+            const decimals = 6; // SKR decimals
+            setPriceSkr(Number(tokenPayment.amount.basisPoints) / 10 ** decimals);
+          }
+        }
+      } catch (err) {
+        console.warn('[Mint] Failed to fetch live prices:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [umi]);
 
   const handleMint = async () => {
     if (!address || !mintEnabled) return;
@@ -69,59 +111,85 @@ export function MintPage() {
       const candyMachine = await fetchCandyMachine(umi, cmPublicKey);
       const candyGuard = await fetchCandyGuard(umi, candyMachine.mintAuthority);
 
-      const asset = generateSigner(umi);
-
-      let mintArgs: OptionOrNullable<object> | undefined;
+      // Build mintArgs from on-chain guard data per Metaplex docs
+      const guardGroup = candyGuard.groups.find((g) => g.label === group);
+      if (!guardGroup) {
+        throw new Error(`Guard group "${group}" not found on candy machine`);
+      }
+      const guards = guardGroup.guards;
+      const mintArgs: Partial<DefaultGuardSetMintArgs> = {};
 
       if (group === 'skr') {
-        const skrGroup = candyGuard.groups.find((g) => g.label === 'skr');
-        const tokenPayment = skrGroup?.guards.tokenPayment;
-        const destAta = tokenPayment?.__option === 'Some'
-          ? tokenPayment.value.destinationAta
-          : publicKey(SKR_MINT);
-
-        mintArgs = {
-          tokenPayment: some({
+        const tokenPayment = unwrapOption(guards.tokenPayment);
+        if (tokenPayment) {
+          mintArgs.tokenPayment = some({
             mint: publicKey(SKR_MINT),
-            destinationAta: destAta,
-          }),
-          mintLimit: some({ id: 3 }),
-        };
+            destinationAta: tokenPayment.destinationAta,
+          });
+        }
+        const mintLimit = unwrapOption(guards.mintLimit);
+        if (mintLimit) mintArgs.mintLimit = some({ id: mintLimit.id });
       } else {
-        const publicGroup = candyGuard.groups.find((g) => g.label === 'public');
-        const solPaymentGuard = publicGroup?.guards.solPayment;
-        const solPaymentDest = solPaymentGuard?.__option === 'Some'
-          ? solPaymentGuard.value.destination
-          : undefined;
-
-        mintArgs = {
-          solPayment: solPaymentDest
-            ? some({ destination: solPaymentDest })
-            : undefined,
-          mintLimit: some({ id: 1 }),
-        };
+        const solPayment = unwrapOption(guards.solPayment);
+        if (solPayment) {
+          mintArgs.solPayment = some({ destination: solPayment.destination });
+        }
+        const mintLimit = unwrapOption(guards.mintLimit);
+        if (mintLimit) mintArgs.mintLimit = some({ id: mintLimit.id });
       }
 
-      await transactionBuilder()
+      const asset = generateSigner(umi);
+      const priorityFee = await fetchPriorityFee([CANDY_MACHINE_ADDRESS]);
+
+      const tx = transactionBuilder()
         .add(setComputeUnitLimit(umi, { units: 800_000 }))
+        .add(setComputeUnitPrice(umi, { microLamports: priorityFee }))
         .add(
           mintV1(umi, {
             candyMachine: cmPublicKey,
+            candyGuard: candyGuard.publicKey,
             asset,
             collection: candyMachine.collectionMint,
             group: some(group),
             mintArgs,
           }),
-        )
-        .sendAndConfirm(umi);
+        );
+
+      // Sign first, then send + confirm separately.
+      // Keeps the wallet interaction short so Phantom's MV3 service worker
+      // doesn't time out during the slower confirmation phase.
+      const signedTx = await tx.buildAndSign(umi);
+
+      // Capture the blockhash used by the transaction for confirmation.
+      // Using a different blockhash can cause confirmation to falsely report
+      // expiry while the original transaction is still valid.
+      const txBlockhash = umi.transactions.deserialize(
+        umi.transactions.serialize(signedTx),
+      ).message.blockhash;
+      const blockhashWithExpiry = await umi.rpc.getLatestBlockhash();
+      // Override with the actual blockhash baked into the transaction
+      blockhashWithExpiry.blockhash = txBlockhash;
+
+      const signature = await umi.rpc.sendTransaction(signedTx);
+      const [sigStr] = base58.deserialize(signature);
+      console.log('[Mint] Sent:', sigStr);
+
+      const result = await umi.rpc.confirmTransaction(signature, {
+        strategy: { type: 'blockhash', ...blockhashWithExpiry },
+        commitment: 'confirmed',
+      });
+
+      if (result.value.err) {
+        throw new Error(`Transaction failed on-chain: ${JSON.stringify(result.value.err)}`);
+      }
 
       setStatus('success');
       setRetrieving(false);
 
-      // Brief "Minted!" celebration before starting retrieval
       await new Promise((r) => setTimeout(r, 1200));
       setRetrieving(true);
 
+      // Poll DAS until the new asset appears
       const prevIds = prevOwnedIdsRef.current;
       let finalList = await refreshOwned();
       for (let i = 0; i < 30 && finalList.length <= prevIds.size; i++) {
@@ -129,18 +197,16 @@ export function MintPage() {
         finalList = await refreshOwned();
       }
 
-      // Point the owned carousel to the newly minted NFT
       const newNft = finalList.find((n) => !prevIds.has(n.id));
       if (newNft) setActiveOwnedNftId(newNft.id);
 
       setPendingMintLoad(true);
       openOverlay('owned');
       navigate('/');
-    } catch (err) {
+    } catch (err: unknown) {
+      console.error('[Mint] Error:', err);
       setStatus('error');
-      const msg = err instanceof Error ? err.message : 'Mint failed';
-      setError(msg);
-      console.error('Mint error:', err);
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -245,8 +311,8 @@ export function MintPage() {
                     {/* Price */}
                     <p className="font-mono text-lg text-[rgba(0,255,128,0.85)] tracking-widest">
                       {paymentMethod === 'skr'
-                        ? `${MINT_PRICE_SKR.toLocaleString()} SKR`
-                        : `${MINT_PRICE_SOL} SOL`}
+                        ? `${priceSkr.toLocaleString()} SKR`
+                        : `${priceSol} SOL`}
                     </p>
                   </>
                 )}

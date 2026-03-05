@@ -13,6 +13,7 @@ import {
   keypairIdentity,
   publicKey,
   some,
+  unwrapOption,
   transactionBuilder,
 } from '@metaplex-foundation/umi';
 import { setComputeUnitLimit } from '@metaplex-foundation/mpl-toolbox';
@@ -99,20 +100,22 @@ async function main() {
 
   console.log('\nAttempting mint...');
   try {
-    // Build mint args based on group
-    const mintArgs: Record<string, any> = {};
+    // Build mint args from on-chain guard data
+    const guardGroup = candyGuard.groups.find((g) => g.label === group);
+    const guards = guardGroup?.guards ?? candyGuard.guards;
+    const mintArgs: Record<string, unknown> = {};
+
     if (group === 'public') {
-      // Find solPayment destination from the public group
-      const groups = candyGuard.groups;
-      const publicGroup = groups.find((g) => g.label === 'public');
-      const solPayment = publicGroup?.guards.solPayment;
-      if (solPayment?.__option === 'Some') {
-        mintArgs.solPayment = some({ destination: solPayment.value.destination });
+      const solPayment = unwrapOption(guards.solPayment);
+      if (solPayment) {
+        mintArgs.solPayment = some({ destination: solPayment.destination });
       }
-      mintArgs.mintLimit = some({ id: 1 });
+      const mintLimit = unwrapOption(guards.mintLimit);
+      if (mintLimit) mintArgs.mintLimit = some({ id: mintLimit.id });
     } else {
-      mintArgs.allowList = some({ merkleRoot: getMerkleProof(ADMIN_WALLETS, keypair.publicKey.toString()).root });
-      mintArgs.mintLimit = some({ id: 2 });
+      mintArgs.allowList = some({
+        merkleRoot: getMerkleProof(ADMIN_WALLETS, keypair.publicKey.toString()).root,
+      });
     }
 
     const tx = transactionBuilder()
@@ -120,6 +123,7 @@ async function main() {
       .add(
         mintV1(umi, {
           candyMachine: cmPk,
+          candyGuard: candyGuard.publicKey,
           asset,
           collection,
           group: some(group),

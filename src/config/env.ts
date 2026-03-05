@@ -29,8 +29,8 @@ export const COLLECTION_ADDRESS = DEMO_MODE
   : (import.meta.env.VITE_SEASON_ONE_COLLECTION_ADDRESS || '');
 
 // Mint prices — keep in sync with scripts/create-candy-machine.ts
-export const MINT_PRICE_SOL = 1.11;
-export const MINT_PRICE_SKR = 4200;
+export const MINT_PRICE_SOL = 1;
+export const MINT_PRICE_SKR = 20_000_000;
 
 // SKR token mint (Seeker coin — mainnet only)
 export const SKR_MINT = 'SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3';

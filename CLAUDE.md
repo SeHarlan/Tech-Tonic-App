@@ -45,6 +45,6 @@ Use **Phosphor Icons** (`@phosphor-icons/react`) for all icons in React componen
 
 ## Agent Directives
 - When a task has multiple viable approaches, present 2-3 solution options with brief pros/cons before implementing. For simple, obvious fixes, proceed directly.
-- Ask clarifying questions before starting work if the request is ambiguous or if a solution has meaningful tradeoffs.
-- Ask for explicit confirmation before: deleting files or large code blocks, rewriting or refactoring more than ~50 lines, or creating new files that change project structure.
-- Ask for explicit confirmation before any git operations (commit, push, merge, rebase, branch deletion, etc.).
+- Ask clarifying questions for user and wait for answers before starting work if the request is ambiguous or if a solution has meaningful tradeoffs.
+- Ask and wait for explicit confirmation from user before: deleting files or large code blocks, rewriting or refactoring more than ~50 lines, or creating new files that change project structure.
+- Ask and wait for explicit confirmation from user before any git operations (commit, push, merge, rebase, branch deletion, etc.).

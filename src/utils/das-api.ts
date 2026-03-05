@@ -88,21 +88,55 @@ export async function fetchCollectionAssets(collectionAddress: string): Promise<
   return result.items.map(assetToNftItem);
 }
 
+/** Estimate an optimal priority fee via Helius getPriorityFeeEstimate */
+export async function fetchPriorityFee(
+  accountKeys: string[],
+  level: 'min' | 'low' | 'medium' | 'high' | 'veryHigh' | 'unsafeMax' = 'high',
+): Promise<number> {
+  try {
+    const result = await dasRpc<{ priorityFeeEstimate: number }>(
+      'getPriorityFeeEstimate',
+      {
+        accountKeys,
+        options: { priorityLevel: level },
+      },
+    );
+    return Math.round(result.priorityFeeEstimate);
+  } catch {
+    // Fallback: 50k microlamports if the estimate call fails
+    return 50_000;
+  }
+}
+
 /** Fetch assets owned by a wallet, filtered to a specific collection */
 export async function fetchOwnedCollectionAssets(
   ownerAddress: string,
   collectionAddress: string,
 ): Promise<NftItem[]> {
-  const result = await dasRpc<{ items: DasAsset[] }>('getAssetsByOwner', {
-    ownerAddress,
-    page: 1,
-    limit: 1000,
-  });
-  return result.items
-    .filter((a) =>
+  // Try searchAssets with grouping filter first (server-side filtering).
+  // Fall back to getAssetsByOwner with client-side filtering if unsupported.
+  try {
+    const result = await dasRpc<{ items: DasAsset[] }>('searchAssets', {
+      ownerAddress,
+      grouping: ['collection', collectionAddress],
+      page: 1,
+      limit: 1000,
+    });
+    console.log(`[DAS] searchAssets returned ${result.items.length} items`);
+    return result.items.map(assetToNftItem);
+  } catch (err) {
+    console.warn('[DAS] searchAssets failed, falling back to getAssetsByOwner:', err);
+    const result = await dasRpc<{ items: DasAsset[] }>('getAssetsByOwner', {
+      ownerAddress,
+      page: 1,
+      limit: 1000,
+    });
+    const filtered = result.items.filter((a) =>
       a.grouping?.some(
         (g) => g.group_key === 'collection' && g.group_value === collectionAddress,
       ),
-    )
-    .map(assetToNftItem);
+    );
+    console.log(`[DAS] getAssetsByOwner returned ${result.items.length} total, ${filtered.length} in collection`);
+    return filtered.map(assetToNftItem);
+  }
 }

@@ -39,16 +39,15 @@ const COLLECTION_DESCRIPTION =
 const NAME_PREFIX = 'TechTonic #';
 const CONFIG_LINES_BATCH_SIZE = 10;
 const ROYALTY_BPS = 1000; // 10% royalty
-const DEFAULT_PRICE_SOL = 1.11;
+const DEFAULT_PRICE_SOL = MINT_PRICE_SOL;
 const MINT_LIMIT = 3;
-const ADMIN_MINT_LIMIT = 10;
 const ROYALTY_WALLET = 'EZAdWMUWCKSPH6r6yNysspQsZULwT9zZPqQzRhrUNwDX';
 const BOT_TAX_SOL = 0.001;
 
 // SKR token payment (Seeker coin — mainnet only, won't exist on devnet)
 const SKR_MINT = 'SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3';
 const SKR_DECIMALS = 6;
-const SKR_PRICE = 4200; // ~2/3 SOL-equivalent at current rates, adjust as needed
+const SKR_PRICE = MINT_PRICE_SKR; // ~2/3 SOL-equivalent at current rates, adjust as needed
 
 // Admin wallets for free preminting (allowList guard group)
 const ADMIN_WALLETS = [
@@ -75,6 +74,7 @@ interface Args {
   cluster: 'devnet' | 'mainnet-beta';
   price: number;
   rpc: string;
+  demoVersion: number | null;
 }
 
 function parseArgs(): Args {
@@ -86,6 +86,7 @@ function parseArgs(): Args {
     cluster: DEFAULT_CLUSTER,
     price: DEFAULT_PRICE_SOL,
     rpc: DEFAULT_RPC,
+    demoVersion: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -108,6 +109,9 @@ function parseArgs(): Args {
       case '--rpc':
         args.rpc = argv[++i];
         break;
+      case '--demo-version':
+        args.demoVersion = parseInt(argv[++i], 10);
+        break;
     }
   }
 
@@ -129,9 +133,27 @@ async function main() {
     process.exit(1);
   }
 
+  // On devnet, prepend "DEMO v{N}" to the collection name.
+  // Auto-increments from the last candy-machine.json if --demo-version is not set.
+  const isMainnet = args.cluster === 'mainnet-beta';
+  let demoVersion = args.demoVersion;
+  if (!isMainnet && demoVersion === null) {
+    try {
+      const prev = JSON.parse(
+        await readFile(resolve('./generated/candy-machine.json'), 'utf-8'),
+      );
+      demoVersion = (prev.demoVersion ?? 0) + 1;
+    } catch {
+      demoVersion = 1;
+    }
+  }
+  const collectionName = isMainnet
+    ? COLLECTION_NAME
+    : `DEMO v${demoVersion} — ${COLLECTION_NAME}`;
+
   console.log('\n=== Core Candy Machine Creator ===');
   console.log(`  Config:     ${args.configLines}`);
-  console.log(`  Collection: ${args.collectionImage}`);
+  console.log(`  Collection: ${collectionName}`);
   console.log(`  Cluster:    ${args.cluster}`);
   console.log(`  Price:      ${args.price} SOL`);
   console.log(`  RPC:        ${rpcUrl}\n`);
@@ -179,7 +201,7 @@ async function main() {
 
   // Upload collection metadata
   const collectionMetadataUri = await umi.uploader.uploadJson({
-    name: COLLECTION_NAME,
+    name: collectionName,
     description: COLLECTION_DESCRIPTION,
     image: collectionImageUri,
   });
@@ -188,7 +210,7 @@ async function main() {
   const collectionSigner = generateSigner(umi);
   await createCollection(umi, {
     collection: collectionSigner,
-    name: COLLECTION_NAME,
+    name: collectionName,
     uri: collectionMetadataUri,
     plugins: [
       {
@@ -246,48 +268,69 @@ async function main() {
     guards: {
       botTax: some({ lamports: sol(BOT_TAX_SOL), lastInstruction: true }),
     },
-    // Phase timing — derive from MINT_START_TIME
-    // Admin: starts immediately (no startDate), no end
-    // SKR:   MINT_START_TIME → +24h
-    // Public: MINT_START_TIME + 24h → no end
+    // Guard groups differ by cluster:
+    // Devnet/demo: admin + public only, no timing guards, no SKR (token doesn't exist)
+    // Mainnet:     admin + public + skr, with startDate/endDate phase timing
     groups: (() => {
+      const isMainnet = args.cluster === 'mainnet-beta';
+
+      const adminGroup = {
+        label: 'admin',
+        guards: {
+          allowList: some({ merkleRoot: adminMerkleRoot }),
+        },
+      };
+
+      const publicGroup = isMainnet
+        ? (() => {
+            const mintStartMs = new Date(MINT_START_TIME).getTime();
+            const publicStartSec = Math.floor(
+              (mintStartMs + PHASE_DURATION_MS) / 1000,
+            );
+            return {
+              label: 'public',
+              guards: {
+                solPayment: some({
+                  lamports: sol(args.price),
+                  destination: publicKey(ROYALTY_WALLET),
+                }),
+                mintLimit: some({ id: 1, limit: MINT_LIMIT }),
+                startDate: some({ date: dateTime(publicStartSec) }),
+              },
+            };
+          })()
+        : {
+            label: 'public',
+            guards: {
+              solPayment: some({
+                lamports: sol(args.price),
+                destination: publicKey(ROYALTY_WALLET),
+              }),
+              mintLimit: some({ id: 1, limit: MINT_LIMIT }),
+            },
+          };
+
+      if (!isMainnet) return [adminGroup, publicGroup];
+
       const mintStartMs = new Date(MINT_START_TIME).getTime();
       const skrStartSec = Math.floor(mintStartMs / 1000);
       const skrEndSec = Math.floor((mintStartMs + PHASE_DURATION_MS) / 1000);
-      const publicStartSec = skrEndSec;
 
-      return [
-        {
-          label: 'admin',
-          guards: {
-            allowList: some({ merkleRoot: adminMerkleRoot }),
-          },
+      const skrGroup = {
+        label: 'skr',
+        guards: {
+          tokenPayment: some({
+            amount: BigInt(SKR_PRICE) * BigInt(10 ** SKR_DECIMALS),
+            mint: publicKey(SKR_MINT),
+            destinationAta: publicKey(ROYALTY_WALLET),
+          }),
+          mintLimit: some({ id: 3, limit: MINT_LIMIT }),
+          startDate: some({ date: dateTime(skrStartSec) }),
+          endDate: some({ date: dateTime(skrEndSec) }),
         },
-        {
-          label: 'public',
-          guards: {
-            solPayment: some({
-              lamports: sol(args.price),
-              destination: publicKey(ROYALTY_WALLET),
-            }),
-            mintLimit: some({ id: 1, limit: MINT_LIMIT }),
-            startDate: some({ date: dateTime(publicStartSec) }),
-          },
-        },
-        {
-          label: 'skr',
-          guards: {
-            tokenPayment: some({
-              amount: BigInt(SKR_PRICE) * BigInt(10 ** SKR_DECIMALS),
-              mint: publicKey(SKR_MINT),
-              destinationAta: publicKey(ROYALTY_WALLET),
-            }),
-            mintLimit: some({ id: 3, limit: MINT_LIMIT }),
-            startDate: some({ date: dateTime(skrStartSec) }),
-            endDate: some({ date: dateTime(skrEndSec) }),
-          },
-        },
-      ];
+      };
+
+      return [adminGroup, skrGroup, publicGroup];
     })(),
   });
   await createBuilder.sendAndConfirm(umi, { confirm: { commitment: 'finalized' } });
@@ -317,15 +360,17 @@ async function main() {
   }
 
   // --- 4. Save output ---
-  const output = {
+  const output: Record<string, unknown> = {
     candyMachine: candyMachine.publicKey.toString(),
     collection: collectionSigner.publicKey.toString(),
+    collectionName,
     itemsAvailable: configLines.length,
     price: args.price,
     cluster: args.cluster,
     standard: 'core',
     createdAt: new Date().toISOString(),
   };
+  if (demoVersion !== null) output.demoVersion = demoVersion;
 
   const outputPath = './generated/candy-machine.json';
   await writeFile(outputPath, JSON.stringify(output, null, 2));
@@ -336,7 +381,7 @@ async function main() {
   console.log(`  Items:         ${configLines.length}`);
   console.log(`  Price:         ${args.price} SOL`);
   console.log(`  Royalties:     ${ROYALTY_BPS / 100}% (enforced via Core plugin)`);
-  console.log(`  Guards:        botTax (default), solPayment + mintLimit(${MINT_LIMIT}) (public), allowList + mintLimit(${ADMIN_MINT_LIMIT}) (admin)`);
+  console.log(`  Guards:        botTax (default), solPayment + mintLimit(${MINT_LIMIT}) (public), allowList (admin)${args.cluster === 'mainnet-beta' ? `, tokenPayment + mintLimit(${MINT_LIMIT}) (skr)` : ''}`);
   console.log(`  Output:        ${outputPath}`);
   console.log(
     `\nAdd to your .env:` +

@@ -13,8 +13,8 @@ import { RPC_ENDPOINT } from '../config/env';
 
 /**
  * Bridge @solana/connector's TransactionSigner to Umi's Signer interface.
- * Converts Umi transactions to Uint8Array, passes to wallet for signing,
- * and deserializes the signed result back to Umi format.
+ * Serializes Umi transactions → Uint8Array for the wallet, then deserializes
+ * the signed bytes back into Umi's Transaction type.
  */
 function createWalletSigner(
   address: string,
@@ -23,40 +23,27 @@ function createWalletSigner(
   >,
   umi: ReturnType<typeof createUmi>,
 ): Signer {
+  const pk = publicKey(address);
+
+  const signTransaction = async (transaction: Transaction) => {
+    const serialized = umi.transactions.serialize(transaction);
+    const signed = await connectorSigner.signTransaction(serialized);
+    const signedBytes = signed instanceof Uint8Array
+      ? signed
+      : new Uint8Array(signed.buffer, signed.byteOffset, signed.byteLength);
+    return umi.transactions.deserialize(signedBytes);
+  };
+
   return {
-    publicKey: publicKey(address),
-
-    signTransaction: async (transaction: Transaction) => {
-      const serialized = umi.transactions.serialize(transaction);
-      const signed = await connectorSigner.signTransaction(serialized);
-
-      // Handle various return formats from the connector
-      if (signed instanceof Uint8Array) {
-        return umi.transactions.deserialize(signed);
-      }
-      if (ArrayBuffer.isView(signed)) {
-        return umi.transactions.deserialize(
-          new Uint8Array(signed.buffer, signed.byteOffset, signed.byteLength),
-        );
-      }
-      // web3.js Transaction or VersionedTransaction — has serialize()
-      const bytes = (signed as { serialize(): Uint8Array }).serialize();
-      return umi.transactions.deserialize(bytes);
-    },
-
-    signAllTransactions: async (transactions: Transaction[]) => {
-      return Promise.all(
-        transactions.map((tx) =>
-          createWalletSigner(address, connectorSigner, umi).signTransaction(tx),
-        ),
-      );
-    },
-
+    publicKey: pk,
+    signTransaction,
+    signAllTransactions: (txs: Transaction[]) =>
+      Promise.all(txs.map(signTransaction)),
     signMessage: async (message: Uint8Array) => {
-      if (connectorSigner.signMessage) {
-        return connectorSigner.signMessage(message);
+      if (!connectorSigner.signMessage) {
+        throw new Error('Wallet does not support message signing');
       }
-      throw new Error('Wallet does not support message signing');
+      return connectorSigner.signMessage(message);
     },
   };
 }
@@ -71,8 +58,7 @@ export function useUmi() {
     umi.use(mplCandyMachine());
 
     if (address && walletSigner) {
-      const signer = createWalletSigner(address, walletSigner, umi);
-      umi.use(signerIdentity(signer));
+      umi.use(signerIdentity(createWalletSigner(address, walletSigner, umi)));
     }
 
     return umi;

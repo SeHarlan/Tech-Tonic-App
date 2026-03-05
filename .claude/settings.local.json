@@ -20,7 +20,8 @@
       "WebFetch(domain:docs.irys.xyz)",
       "WebFetch(domain:mpl-candy-machine.typedoc.metaplex.com)",
       "WebFetch(domain:mpl-core-candy-machine.typedoc.metaplex.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:www.helius.dev)"
     ]
   }
 }
