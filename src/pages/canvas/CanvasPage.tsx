@@ -1,9 +1,11 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import { createEngine, type Engine } from '../../engine/renderer';
 import { cn } from '../../utils/ui-helpers';
 import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
 import { CanvasOverlay } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
+import { sketchSeedAtom } from '../../store/atoms';
 import type { NftItem } from '../../utils/das-api';
 import './canvas-overlay.css';
 
@@ -26,7 +28,7 @@ export function CanvasPage() {
   const menuDrawerRef = useRef<MenuDrawerHandle>(null);
   const engineRef = useRef<Engine | null>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
-  const [seed] = useState(() => Math.floor(Math.random() * 1000));
+  const seed = useAtomValue(sketchSeedAtom);
   const { isOverlayOpen, openOverlay, closeOverlay } = useOverlay();
 
   const [canvasBottom, setCanvasBottom] = useState(0);
@@ -91,16 +93,10 @@ export function CanvasPage() {
   }, [engine, isOverlayOpen, openOverlay, closeOverlay, computeCanvasBottom]);
 
   const handleOverlayClose = useCallback(
-    (selectedNft?: NftItem) => {
+    (_selectedNft?: NftItem) => {
       closeOverlay();
-      if (engine && selectedNft) {
-        engine
-          .loadSession(selectedNft.seed, selectedNft.frameCount, selectedNft.thumbnailUrl)
-          .catch((err) => console.error('Failed to load NFT session:', err))
-          .finally(() => engine.setGlobalFreeze(false));
-      } else if (engine) {
-        engine.setGlobalFreeze(false);
-      }
+      // NFT is already loaded into the engine by NftBrowser — just unfreeze
+      engine?.setGlobalFreeze(false);
     },
     [engine, closeOverlay],
   );
@@ -124,8 +120,6 @@ export function CanvasPage() {
     engine?.handlePointerUp();
   }
 
-  const showTouchPrompt = !hadWallet;
-
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center">
       <canvas
@@ -141,8 +135,9 @@ export function CanvasPage() {
       {isOverlayOpen && (
         <CanvasOverlay
           canvasBottom={canvasBottom}
+          engine={engine}
           onClose={handleOverlayClose}
-          showTouchPrompt={showTouchPrompt}
+          showTouchPrompt
         />
       )}
     </div>

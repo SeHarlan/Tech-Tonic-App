@@ -25,7 +25,7 @@ import { useSetAtom } from 'jotai';
 import { useOverlay } from '../../hooks/useOverlay';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useRefreshOwned } from '../../hooks/useRefreshOwned';
-import { activeOwnedNftIdAtom } from '../../store/atoms';
+import { activeOwnedNftIdAtom, pendingMintLoadAtom } from '../../store/atoms';
 import './mint-page.css';
 
 type MintStatus = 'idle' | 'minting' | 'success' | 'retrieving' | 'error';
@@ -41,6 +41,7 @@ export function MintPage() {
   const { ownedNfts } = useNftStore();
   const refreshOwned = useRefreshOwned();
   const setActiveOwnedNftId = useSetAtom(activeOwnedNftIdAtom);
+  const setPendingMintLoad = useSetAtom(pendingMintLoadAtom);
 
   const [status, setStatus] = useState<MintStatus>('idle');
   const [error, setError] = useState<string>('');
@@ -130,6 +131,7 @@ export function MintPage() {
       const newNft = finalList.find((n) => !prevIds.has(n.id));
       if (newNft) setActiveOwnedNftId(newNft.id);
 
+      setPendingMintLoad(true);
       openOverlay('owned');
       navigate('/');
     } catch (err) {

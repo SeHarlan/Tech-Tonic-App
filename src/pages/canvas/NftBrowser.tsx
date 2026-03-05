@@ -1,24 +1,48 @@
 import { useRef, useCallback } from 'react';
 import { CaretLeft, CaretRight } from '@phosphor-icons/react';
+import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
 
 interface NftBrowserProps {
-  items: NftItem[];
-  index: number;
+  count: number;
   onNavigate: (dir: 1 | -1) => void;
 }
 
 const SWIPE_THRESHOLD = 50;
+const RENDER_FRAMES_BEFORE_FREEZE = 3;
+
+function renderThenFreeze(engine: Engine) {
+  engine.setGlobalFreeze(false);
+  let frames = 0;
+  const wait = () => {
+    frames++;
+    if (frames >= RENDER_FRAMES_BEFORE_FREEZE) {
+      engine.setGlobalFreeze(true);
+    } else {
+      requestAnimationFrame(wait);
+    }
+  };
+  requestAnimationFrame(wait);
+}
+
+export function loadNftIntoEngine(engine: Engine, nft: NftItem) {
+  engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl)
+    .then(() => renderThenFreeze(engine))
+    .catch((err) => console.error('Failed to load NFT into engine:', err));
+}
+
+export function loadSketchSeed(engine: Engine, seed: number) {
+  engine.setSeed(seed);
+  renderThenFreeze(engine);
+}
 
 /**
- * Full-screen NFT browsing layer: background image + edge-mounted arrow buttons.
- * Renders at the overlay level (not inside the panel).
+ * Full-screen NFT browsing layer: swipe/arrow navigation UI.
+ * Loading is handled imperatively by the parent on user actions.
  */
-export function NftBrowser({ items, index, onNavigate }: NftBrowserProps) {
+export function NftBrowser({ count, onNavigate }: NftBrowserProps) {
   const pointerStart = useRef<{ x: number } | null>(null);
   const didSwipe = useRef(false);
-
-  const current = items[index];
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     pointerStart.current = { x: e.clientX };
@@ -36,21 +60,10 @@ export function NftBrowser({ items, index, onNavigate }: NftBrowserProps) {
     pointerStart.current = null;
   }, [onNavigate]);
 
-  const count = items.length;
   if (count === 0) return null;
 
   return (
     <>
-      {/* Thumbnail positioned like the canvas — centered, scaled 0.8, with glow border */}
-      <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
-        <img
-          src={current.thumbnailUrl}
-          alt={current.name}
-          className="canvas-overlay-glow max-h-full max-w-full object-contain"
-          draggable={false}
-        />
-      </div>
-
       {/* Swipe capture zone — only blocks click propagation after a real swipe */}
       <div
         className="absolute inset-0 z-3 touch-none"

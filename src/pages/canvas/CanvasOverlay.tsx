@@ -1,18 +1,21 @@
-import { useMemo, useCallback } from 'react';
-import { useAtom } from 'jotai';
+import { useMemo, useCallback, useEffect } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
 import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
-import { NftBrowser } from './NftBrowser';
+import { NftBrowser, loadNftIntoEngine, loadSketchSeed } from './NftBrowser';
 import { XIcon } from '@phosphor-icons/react';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
 import {
   activeOwnedNftIdAtom,
   activeDiscoverNftIdAtom,
+  sketchSeedAtom,
+  pendingMintLoadAtom,
 } from '../../store/atoms';
+import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
 import './canvas-overlay.css';
 
@@ -25,16 +28,19 @@ function indexFromId(list: NftItem[], id: string | null): number {
 
 interface CanvasOverlayProps {
   canvasBottom: number;
+  engine: Engine | null;
   onClose: (selectedNft?: NftItem) => void;
   showTouchPrompt?: boolean;
 }
 
-export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose, showTouchPrompt }: CanvasOverlayProps) {
+export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt }: CanvasOverlayProps) {
   const navigate = useNavigate();
   const { overlayTab, setOverlayTab, hasOwned } = useOverlayWithNfts();
   const { ownedNfts, discoverNfts } = useNftStore();
   const [activeOwnedId, setActiveOwnedId] = useAtom(activeOwnedNftIdAtom);
   const [activeDiscoverId, setActiveDiscoverId] = useAtom(activeDiscoverNftIdAtom);
+  const sketchSeed = useAtomValue(sketchSeedAtom);
+  const [pendingMintLoad, setPendingMintLoad] = useAtom(pendingMintLoadAtom);
 
   const activeTab = overlayTab;
 
@@ -47,6 +53,13 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose, showTouchP
 
   const currentNft = browserItems.length > 0 ? browserItems[browseIndex] : null;
   const isBrowsing = activeTab !== 'sketch' && browserItems.length > 0;
+
+  // After a successful mint, load the newly minted NFT into the engine
+  useEffect(() => {
+    if (!pendingMintLoad || !engine || !currentNft) return;
+    setPendingMintLoad(false);
+    loadNftIntoEngine(engine, currentNft);
+  }, [pendingMintLoad, engine, currentNft, setPendingMintLoad]);
 
   const controlBottom = useMemo(() => {
     const midpoint = _canvasBottom + (window.innerHeight - _canvasBottom) / 2;
@@ -73,7 +86,17 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose, showTouchP
 
   const handleTabChange = useCallback((tab: OverlayTab) => {
     setOverlayTab(tab);
-  }, [setOverlayTab]);
+    if (!engine) return;
+    if (tab === 'sketch') {
+      loadSketchSeed(engine, sketchSeed);
+      return;
+    }
+    const tabItems = tab === 'owned' ? ownedNfts : discoverNfts;
+    const tabId = tab === 'owned' ? activeOwnedId : activeDiscoverId;
+    const idx = indexFromId(tabItems, tabId);
+    const nft = tabItems[idx];
+    if (nft) loadNftIntoEngine(engine, nft);
+  }, [setOverlayTab, engine, sketchSeed, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
 
   const handleNavigate = useCallback((dir: 1 | -1) => {
     const len = browserItems.length;
@@ -82,7 +105,8 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose, showTouchP
     const nft = browserItems[next];
     if (activeTab === 'owned') setActiveOwnedId(nft.id);
     else if (activeTab === 'discover') setActiveDiscoverId(nft.id);
-  }, [browserItems, browseIndex, activeTab, setActiveOwnedId, setActiveDiscoverId]);
+    if (engine && nft) loadNftIntoEngine(engine, nft);
+  }, [browserItems, browseIndex, activeTab, setActiveOwnedId, setActiveDiscoverId, engine]);
 
   return (
     <div
@@ -94,13 +118,13 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose, showTouchP
     >
       {/* Full-screen NFT browser (image + arrows + swipe) — behind overlay effects */}
       {isBrowsing && (
-        <NftBrowser items={browserItems} index={browseIndex} onNavigate={handleNavigate} />
+        <NftBrowser count={browserItems.length} onNavigate={handleNavigate} />
       )}
 
       {/* Touch prompt — centered, doesn't intercept clicks */}
-      {showTouchPrompt && activeTab === 'sketch' && (
+      {showTouchPrompt && (
         <p className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 font-mono text-sm tracking-[0.2em] uppercase text-[rgba(0,255,128,0.5)] animate-pulse">
-          touch anywhere to begin
+          touch to start program
         </p>
       )}
 
