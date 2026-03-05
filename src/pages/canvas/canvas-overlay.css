@@ -357,6 +357,122 @@
   animation: pip-scanline 10s linear infinite;
 }
 
+/* ===== GLITCH BURST (tab switch + page load) ===== */
+
+/*
+ * Three-layer glitch: the element itself is the lost-signal static/snow,
+ * ::before is thin RGB tear lines, ::after is dirt/dust speckle.
+ */
+.tab-glitch-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 25;
+  overflow: hidden;
+  /* Analog static snow — triple-layer pixel noise for maximum density */
+  background:
+    repeating-conic-gradient(
+      rgba(0, 255, 128, 0.28) 0deg,
+      rgba(0, 0, 0, 0.45) 0.4deg,
+      rgba(255, 255, 255, 0.18) 0.8deg,
+      rgba(0, 0, 0, 0.35) 1.2deg,
+      rgba(0, 255, 128, 0.2) 1.6deg,
+      rgba(0, 0, 0, 0.5) 2deg,
+      rgba(255, 255, 255, 0.12) 2.4deg,
+      rgba(0, 0, 0, 0.25) 2.8deg
+    ),
+    repeating-conic-gradient(
+      rgba(0, 0, 0, 0.55) 0deg,
+      rgba(0, 255, 128, 0.15) 0.5deg,
+      rgba(0, 0, 0, 0.4) 1deg,
+      rgba(255, 255, 255, 0.1) 1.5deg,
+      rgba(0, 0, 0, 0.5) 2deg
+    ),
+    repeating-conic-gradient(
+      rgba(255, 255, 255, 0.08) 0deg,
+      rgba(0, 0, 0, 0.3) 0.3deg,
+      rgba(0, 255, 128, 0.1) 0.6deg,
+      rgba(0, 0, 0, 0.4) 0.9deg
+    );
+  background-size: 2px 2px, 3px 3px, 1px 1px;
+  animation: tab-glitch-snow 450ms steps(10) forwards;
+}
+
+/* Thin RGB tear lines — 1px hairlines */
+.tab-glitch-burst::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(transparent 10%, rgba(0, 255, 128, 0.4) 10%, rgba(0, 255, 128, 0.4) 10.15%, transparent 10.15%),
+    linear-gradient(transparent 23%, rgba(255, 0, 60, 0.3) 23%, rgba(255, 0, 60, 0.3) 23.12%, transparent 23.12%),
+    linear-gradient(transparent 37%, rgba(0, 255, 128, 0.3) 37%, rgba(0, 255, 128, 0.3) 37.1%, transparent 37.1%),
+    linear-gradient(transparent 48%, rgba(0, 200, 255, 0.25) 48%, rgba(0, 200, 255, 0.25) 48.12%, transparent 48.12%),
+    linear-gradient(transparent 62%, rgba(255, 0, 60, 0.2) 62%, rgba(255, 0, 60, 0.2) 62.1%, transparent 62.1%),
+    linear-gradient(transparent 71%, rgba(0, 255, 128, 0.35) 71%, rgba(0, 255, 128, 0.35) 71.12%, transparent 71.12%),
+    linear-gradient(transparent 84%, rgba(0, 200, 255, 0.2) 84%, rgba(0, 200, 255, 0.2) 84.1%, transparent 84.1%),
+    linear-gradient(transparent 93%, rgba(0, 255, 128, 0.25) 93%, rgba(0, 255, 128, 0.25) 93.1%, transparent 93.1%);
+  animation: tab-glitch-tears 450ms steps(1) forwards;
+}
+
+/* Dirt / dust speckle — scattered semi-transparent dots */
+.tab-glitch-burst::after {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background:
+    radial-gradient(circle 1px at 12% 8%, rgba(0, 255, 128, 0.3) 100%, transparent 100%),
+    radial-gradient(circle 1px at 67% 15%, rgba(255, 255, 255, 0.15) 100%, transparent 100%),
+    radial-gradient(circle 2px at 34% 29%, rgba(0, 255, 128, 0.2) 100%, transparent 100%),
+    radial-gradient(circle 1px at 81% 37%, rgba(255, 255, 255, 0.12) 100%, transparent 100%),
+    radial-gradient(circle 1px at 23% 52%, rgba(0, 255, 128, 0.25) 100%, transparent 100%),
+    radial-gradient(circle 2px at 56% 61%, rgba(255, 255, 255, 0.1) 100%, transparent 100%),
+    radial-gradient(circle 1px at 89% 73%, rgba(0, 255, 128, 0.2) 100%, transparent 100%),
+    radial-gradient(circle 1px at 45% 88%, rgba(255, 255, 255, 0.15) 100%, transparent 100%),
+    radial-gradient(circle 2px at 8% 94%, rgba(0, 255, 128, 0.15) 100%, transparent 100%);
+  background-size: 200px 200px;
+  animation: tab-glitch-dirt 450ms steps(6) forwards;
+}
+
+/* Static snow — rapid jitter + flicker across 10 steps */
+@keyframes tab-glitch-snow {
+  0%   { opacity: 0.85; transform: translate(0, 0); }
+  10%  { opacity: 0.9;  transform: translate(-2px, 1px); }
+  20%  { opacity: 0.8;  transform: translate(3px, -2px); }
+  30%  { opacity: 0.85; transform: translate(-1px, 2px); }
+  40%  { opacity: 0.75; transform: translate(2px, -1px); }
+  50%  { opacity: 0.65; transform: translate(-3px, 1px); }
+  60%  { opacity: 0.5;  transform: translate(1px, -2px); }
+  70%  { opacity: 0.35; transform: translate(-2px, 0); }
+  80%  { opacity: 0.2;  transform: translate(2px, 1px); }
+  90%  { opacity: 0.08; transform: translate(-1px, -1px); }
+  100% { opacity: 0;    transform: translate(0, 0); }
+}
+
+/* Tear lines — horizontal shear + vertical jumps to fake random positions */
+@keyframes tab-glitch-tears {
+  0%   { transform: translate(0, 0) skewX(0deg); opacity: 1; }
+  10%  { transform: translate(-12px, 13%) skewX(-1.5deg); opacity: 1; }
+  20%  { transform: translate(16px, -27%) skewX(2deg); opacity: 1; }
+  30%  { transform: translate(-8px, 8%) skewX(-1deg); opacity: 0.9; }
+  40%  { transform: translate(10px, -19%) skewX(1.5deg); opacity: 0.8; }
+  50%  { transform: translate(-5px, 22%) skewX(-0.5deg); opacity: 0.6; }
+  60%  { transform: translate(4px, -11%) skewX(0.5deg); opacity: 0.4; }
+  75%  { transform: translate(-2px, 5%) skewX(0deg); opacity: 0.2; }
+  100% { transform: translate(0, 0) skewX(0deg); opacity: 0; }
+}
+
+/* Dirt speckle — jitter around */
+@keyframes tab-glitch-dirt {
+  0%        { transform: translate(0, 0); opacity: 0.8; }
+  16.666%   { transform: translate(-8px, 12px); opacity: 0.7; }
+  33.333%   { transform: translate(14px, -6px); opacity: 0.5; }
+  50%       { transform: translate(-4px, 8px); opacity: 0.4; }
+  66.666%   { transform: translate(10px, -10px); opacity: 0.25; }
+  83.333%   { transform: translate(-6px, 4px); opacity: 0.1; }
+  100%      { transform: translate(0, 0); opacity: 0; }
+}
+
 /* Glowing outline on canvas when overlay is active */
 .canvas-overlay-glow {
   box-shadow:

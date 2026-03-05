@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import { CaretLeft, CaretRight } from '@phosphor-icons/react';
+import { CaretDoubleLeft, CaretDoubleRight } from '@phosphor-icons/react';
 import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
 
@@ -85,7 +85,7 @@ export function NftBrowser({ count, onNavigate }: NftBrowserProps) {
             onClick={(e) => { e.stopPropagation(); onNavigate(-1); }}
             className="overlay-tab-btn absolute left-3 top-1/2 -translate-y-1/2 z-4 bg-transparent border-none cursor-pointer text-[rgba(0,255,128,0.5)] hover:text-[rgb(0,255,128)] p-2"
           >
-            <CaretLeft size={28} weight="bold" />
+            <CaretDoubleLeft size={28} weight="bold" />
           </button>
 
           {/* Right arrow — vertically centered, right edge */}
@@ -94,7 +94,7 @@ export function NftBrowser({ count, onNavigate }: NftBrowserProps) {
             onClick={(e) => { e.stopPropagation(); onNavigate(1); }}
             className="overlay-tab-btn absolute right-3 top-1/2 -translate-y-1/2 z-4 bg-transparent border-none cursor-pointer text-[rgba(0,255,128,0.5)] hover:text-[rgb(0,255,128)] p-2"
           >
-            <CaretRight size={28} weight="bold" />
+            <CaretDoubleRight size={28} weight="bold" />
           </button>
         </>
       )}

@@ -174,7 +174,9 @@ export function CanvasPage() {
                 transform: `scale(${CANVAS_OVERLAY_SCALE})`,
                 opacity: 1,
               }
-            : undefined
+            : !engine
+              ? { transform: `scale(${CANVAS_OVERLAY_SCALE})` }
+              : undefined
         }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

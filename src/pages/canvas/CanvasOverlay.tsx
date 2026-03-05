@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useState, useRef, type PointerEvent as RPointerEvent } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
 import { NftBrowser, loadNftIntoEngine, loadNftIntoEngineAsync, loadSketchSeed } from './NftBrowser';
-import { XIcon } from '@phosphor-icons/react';
+import { XIcon, CaretLineLeft, CaretLineRight } from '@phosphor-icons/react';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
 import {
@@ -27,6 +27,9 @@ function indexFromId(list: NftItem[], id: string | null): number {
 }
 
 export type SlidePhase = 'loading' | 'sliding' | null;
+
+/** First-load glitch should only fire once per page session. */
+let hasPlayedInitialGlitch = false;
 
 interface CanvasOverlayProps {
   canvasBottom: number;
@@ -79,8 +82,34 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     return Math.max(midpoint, minTop);
   }, [_canvasBottom]);
 
+  // --- Glitch burst effect (tab switch + initial load) ---
+  const [tabGlitch, setTabGlitch] = useState(() => {
+    if (hasPlayedInitialGlitch) return false;
+    hasPlayedInitialGlitch = true;
+    return true;
+  });
+  const glitchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Auto-clear the initial load glitch
+  useEffect(() => {
+    if (!tabGlitch) return;
+    glitchTimer.current = setTimeout(() => setTabGlitch(false), 450);
+    return () => clearTimeout(glitchTimer.current);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const triggerGlitch = useCallback(() => {
+    setTabGlitch(false);
+    requestAnimationFrame(() => {
+      setTabGlitch(true);
+      clearTimeout(glitchTimer.current);
+      glitchTimer.current = setTimeout(() => setTabGlitch(false), 450);
+    });
+  }, []);
+
   const handleTabChange = useCallback((tab: OverlayTab) => {
+    if (tab === activeTab) return;
     setOverlayTab(tab);
+    triggerGlitch();
     if (!engine) return;
     if (tab === 'sketch') {
       loadSketchSeed(engine, sketchSeed);
@@ -91,7 +120,34 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     const idx = indexFromId(tabItems, tabId);
     const nft = tabItems[idx];
     if (nft) loadNftIntoEngine(engine, nft);
-  }, [setOverlayTab, engine, sketchSeed, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
+  }, [activeTab, setOverlayTab, triggerGlitch, engine, sketchSeed, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
+
+  // --- Sketch tab swipe handling ---
+  const sketchSwipeStart = useRef<{ x: number } | null>(null);
+  const sketchDidSwipe = useRef(false);
+  const SWIPE_THRESHOLD = 50;
+
+  const onSketchSwipeDown = useCallback((e: RPointerEvent) => {
+    sketchSwipeStart.current = { x: e.clientX };
+    sketchDidSwipe.current = false;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onSketchSwipeUp = useCallback((e: RPointerEvent) => {
+    if (!sketchSwipeStart.current) return;
+    const dx = e.clientX - sketchSwipeStart.current.x;
+    if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+      sketchDidSwipe.current = true;
+      if (dx < 0) {
+        // Swipe left → discover
+        handleTabChange('discover');
+      } else if (hasOwned) {
+        // Swipe right → owned (only if available)
+        handleTabChange('owned');
+      }
+    }
+    sketchSwipeStart.current = null;
+  }, [handleTabChange, hasOwned]);
 
   // --- Carousel transition state ---
   const [transitionSrc, setTransitionSrc] = useState<string | null>(null);
@@ -131,7 +187,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
       setTransitionSrc(null);
       setSlidePhase(null);
       transitionLock.current = false;
-    }, 350);
+    }, 400);
   }, [browserItems, browseIndex, activeTab, setActiveOwnedId, setActiveDiscoverId, engine]);
 
   return (
@@ -147,6 +203,41 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
         <NftBrowser count={browserItems.length} onNavigate={handleNavigate} />
       )}
 
+      {/* Sketch tab — swipe zone + caret-line arrows to switch tabs */}
+      {activeTab === 'sketch' && (
+        <>
+          <div
+            className="absolute inset-0 z-3 touch-none"
+            onClick={(e) => { if (sketchDidSwipe.current) e.stopPropagation(); }}
+            onPointerDown={onSketchSwipeDown}
+            onPointerUp={onSketchSwipeUp}
+            onPointerCancel={() => { sketchSwipeStart.current = null; }}
+          />
+
+          <button
+            type="button"
+            disabled={!hasOwned}
+            onClick={(e) => { e.stopPropagation(); handleTabChange('owned'); }}
+            className={cn(
+              "overlay-tab-btn absolute left-3 top-1/2 -translate-y-1/2 z-4 bg-transparent border-none p-2",
+              hasOwned
+                ? "cursor-pointer text-[rgba(0,255,128,0.5)] hover:text-[rgb(0,255,128)]"
+                : "cursor-not-allowed text-[rgba(0,255,128,0.15)]",
+            )}
+          >
+            <CaretLineLeft size={28} weight="bold" />
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleTabChange('discover'); }}
+            className="overlay-tab-btn absolute right-3 top-1/2 -translate-y-1/2 z-4 bg-transparent border-none cursor-pointer text-[rgba(0,255,128,0.5)] hover:text-[rgb(0,255,128)] p-2"
+          >
+            <CaretLineRight size={28} weight="bold" />
+          </button>
+        </>
+      )}
+
       {/* Touch prompt — centered, doesn't intercept clicks */}
       {showTouchPrompt && (
         <p className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 font-mono text-sm tracking-[0.2em] uppercase text-[rgba(0,255,128,0.5)] animate-pulse">
@@ -159,6 +250,9 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
       {/* CRT vignette */}
       <div className="canvas-overlay-vignette" />
+
+      {/* Tab switch glitch burst */}
+      {tabGlitch && <div className="tab-glitch-burst" />}
 
       {/* Glitch bars */}
       <span className="canvas-overlay-glitch canvas-overlay-glitch-a" />
