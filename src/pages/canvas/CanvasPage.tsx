@@ -3,11 +3,15 @@ import { useAtomValue } from 'jotai';
 import { createEngine, type Engine } from '../../engine/renderer';
 import { cn } from '../../utils/ui-helpers';
 import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
-import { CanvasOverlay } from './CanvasOverlay';
+import { CanvasOverlay, type SlidePhase } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
 import { sketchSeedAtom, pendingMintLoadAtom } from '../../store/atoms';
-import type { NftItem } from '../../utils/das-api';
 import './canvas-overlay.css';
+
+const SLIDE_DURATION_MS = 350;
+const CANVAS_OVERLAY_SCALE = 0.8;
+const SLIDE_EXIT_SCALE = 0.65;
+const SLIDE_ENTER_SCALE = 0.55;
 
 function toCanvasCoords(
   e: React.PointerEvent<HTMLCanvasElement>,
@@ -30,6 +34,17 @@ export function CanvasPage() {
   const { isOverlayOpen, openOverlay, closeOverlay } = useOverlay();
 
   const [canvasBottom, setCanvasBottom] = useState(0);
+
+  // Carousel transition state (lifted from CanvasOverlay)
+  const [transitionSrc, setTransitionSrc] = useState<string | null>(null);
+  const [slidePhase, setSlidePhase] = useState<SlidePhase>(null);
+  const [slideDir, setSlideDir] = useState<1 | -1>(1);
+
+  const handleTransitionChange = useCallback((state: { src: string | null; phase: SlidePhase; dir: 1 | -1 }) => {
+    setTransitionSrc(state.src);
+    setSlidePhase(state.phase);
+    setSlideDir(state.dir);
+  }, []);
 
   const computeCanvasBottom = useCallback(() => {
     if (canvasRef.current) {
@@ -119,13 +134,48 @@ export function CanvasPage() {
 
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center">
+      {/* Carousel transition screenshot — slides out as old content */}
+      {transitionSrc && (
+        <img
+          src={transitionSrc}
+          alt=""
+          className="absolute z-20 max-h-full max-w-full object-contain pointer-events-none"
+          style={{
+            transition: slidePhase === 'sliding'
+              ? `transform ${SLIDE_DURATION_MS}ms ease-in-out, opacity ${SLIDE_DURATION_MS}ms ease-in-out`
+              : 'none',
+            transform: slidePhase === 'sliding'
+              ? `translateX(${slideDir === 1 ? '-100%' : '100%'}) scale(${SLIDE_EXIT_SCALE})`
+              : `scale(${CANVAS_OVERLAY_SCALE})`,
+            opacity: slidePhase === 'sliding' ? 0 : 1,
+          }}
+        />
+      )}
+
       <canvas
         ref={canvasRef}
         className={cn(
-          'z-10 max-h-full max-w-full object-contain touch-none transition-transform duration-500 ease-in-out',
+          'z-10 max-h-full max-w-full object-contain touch-none',
+          // Normal overlay scale transition (only when not carousel-sliding)
+          !slidePhase && 'transition-transform duration-500 ease-in-out',
           isOverlayOpen && 'canvas-overlay-glow',
           !engine && 'bg-[rgba(0,255,128,0.1)]',
         )}
+        style={slidePhase === 'loading'
+          ? {
+              // Instantly position off-screen + small + transparent (no transition)
+              transform: `translateX(${slideDir === 1 ? '100%' : '-100%'}) scale(${SLIDE_ENTER_SCALE})`,
+              opacity: 0,
+            }
+          : slidePhase === 'sliding'
+            ? {
+                // Animate into place at overlay scale
+                transition: `transform ${SLIDE_DURATION_MS}ms ease-in-out, opacity ${SLIDE_DURATION_MS}ms ease-in-out`,
+                transform: `scale(${CANVAS_OVERLAY_SCALE})`,
+                opacity: 1,
+              }
+            : undefined
+        }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -139,6 +189,7 @@ export function CanvasPage() {
           engine={engine}
           onClose={handleOverlayClose}
           showTouchPrompt
+          onTransitionChange={handleTransitionChange}
         />
       )}
     </div>

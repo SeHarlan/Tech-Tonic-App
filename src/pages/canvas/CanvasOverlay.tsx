@@ -1,11 +1,11 @@
-import { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
 import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
-import { NftBrowser, loadNftIntoEngine, loadSketchSeed } from './NftBrowser';
+import { NftBrowser, loadNftIntoEngine, loadNftIntoEngineAsync, loadSketchSeed } from './NftBrowser';
 import { XIcon } from '@phosphor-icons/react';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
@@ -26,14 +26,17 @@ function indexFromId(list: NftItem[], id: string | null): number {
   return i >= 0 ? i : 0;
 }
 
+export type SlidePhase = 'loading' | 'sliding' | null;
+
 interface CanvasOverlayProps {
   canvasBottom: number;
   engine: Engine | null;
   onClose: () => void;
   showTouchPrompt?: boolean;
+  onTransitionChange?: (state: { src: string | null; phase: SlidePhase; dir: 1 | -1 }) => void;
 }
 
-export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt }: CanvasOverlayProps) {
+export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt, onTransitionChange }: CanvasOverlayProps) {
   const navigate = useNavigate();
   const { overlayTab, setOverlayTab, hasOwned } = useOverlayWithNfts();
   const { ownedNfts, discoverNfts } = useNftStore();
@@ -90,14 +93,45 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     if (nft) loadNftIntoEngine(engine, nft);
   }, [setOverlayTab, engine, sketchSeed, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
 
-  const handleNavigate = useCallback((dir: 1 | -1) => {
+  // --- Carousel transition state ---
+  const [transitionSrc, setTransitionSrc] = useState<string | null>(null);
+  const [slidePhase, setSlidePhase] = useState<'loading' | 'sliding' | null>(null);
+  const [slideDir, setSlideDir] = useState<1 | -1>(1);
+  const transitionLock = useRef(false);
+
+  // Notify parent of transition state changes for canvas transforms
+  useEffect(() => {
+    onTransitionChange?.({ src: transitionSrc, phase: slidePhase, dir: slideDir });
+  }, [transitionSrc, slidePhase, slideDir, onTransitionChange]);
+
+  const handleNavigate = useCallback(async (dir: 1 | -1) => {
     const len = browserItems.length;
-    if (len === 0) return;
+    if (len === 0 || !engine || transitionLock.current) return;
+    transitionLock.current = true;
+
     const next = (browseIndex + dir + len) % len;
     const nft = browserItems[next];
     if (activeTab === 'owned') setActiveOwnedId(nft.id);
     else if (activeTab === 'discover') setActiveDiscoverId(nft.id);
-    if (engine && nft) loadNftIntoEngine(engine, nft);
+
+    // 1. Capture screenshot of current frame
+    const src = await engine.captureScreenshotBase64();
+    setTransitionSrc(src);
+    setSlideDir(dir);
+    setSlidePhase('loading');
+
+    // 2-3. Load next NFT into engine (canvas hidden behind screenshot)
+    await loadNftIntoEngineAsync(engine, nft);
+
+    // 4-5. Trigger slide animation
+    setSlidePhase('sliding');
+
+    // 6. Cleanup after CSS transition ends
+    setTimeout(() => {
+      setTransitionSrc(null);
+      setSlidePhase(null);
+      transitionLock.current = false;
+    }, 350);
   }, [browserItems, browseIndex, activeTab, setActiveOwnedId, setActiveDiscoverId, engine]);
 
   return (

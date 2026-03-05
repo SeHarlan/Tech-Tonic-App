@@ -26,9 +26,13 @@ function renderThenFreeze(engine: Engine) {
 }
 
 export function loadNftIntoEngine(engine: Engine, nft: NftItem) {
-  engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode)
-    .then(() => renderThenFreeze(engine))
+  loadNftIntoEngineAsync(engine, nft)
     .catch((err) => console.error('Failed to load NFT into engine:', err));
+}
+
+export async function loadNftIntoEngineAsync(engine: Engine, nft: NftItem) {
+  await engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode);
+  renderThenFreeze(engine);
 }
 
 export function loadSketchSeed(engine: Engine, seed: number) {
