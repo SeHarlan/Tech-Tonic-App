@@ -187,21 +187,31 @@ export function MintPage() {
       setRetrieving(true);
 
       // Wait for DAS indexing before polling — avoids wasted 400s on the first request
-      await new Promise((r) => setTimeout(r, 5000));
+      await new Promise((r) => setTimeout(r, 2000));
 
       // Poll DAS until the new asset appears
       const prevIds = prevOwnedIdsRef.current;
       let finalList = await refreshOwned();
+
+      //poll for up to 60 seconds or until a new nft is found (the new list is longer than the previous list) 
       for (let i = 0; i < 30 && finalList.length <= prevIds.size; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         finalList = await refreshOwned();
       }
 
       const newNft = finalList.find((n) => !prevIds.has(n.id));
-      if (newNft) setActiveOwnedNftId(newNft.id);
 
-      setPendingMintLoad(true);
-      openOverlay('owned');
+      if (newNft) {
+        setActiveOwnedNftId(newNft.id);
+        setPendingMintLoad(true);
+        openOverlay('owned');
+
+        // Let the user enjoy the success state, then navigate.
+        // Also ensures jotai atom writes (overlay tab, pending mint)
+        // fully propagate before CanvasPage mounts and reads them.
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
       navigate('/');
     } catch (err: unknown) {
       console.error('[Mint] Error:', err);

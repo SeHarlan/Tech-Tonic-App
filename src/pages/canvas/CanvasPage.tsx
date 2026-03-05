@@ -5,12 +5,9 @@ import { cn } from '../../utils/ui-helpers';
 import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
 import { CanvasOverlay } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
-import { sketchSeedAtom } from '../../store/atoms';
+import { sketchSeedAtom, pendingMintLoadAtom } from '../../store/atoms';
 import type { NftItem } from '../../utils/das-api';
 import './canvas-overlay.css';
-
-/** Check localStorage to detect a previously connected wallet (auto-reconnect). */
-const hadWallet = !!localStorage.getItem('connector-kit:wallet');
 
 function toCanvasCoords(
   e: React.PointerEvent<HTMLCanvasElement>,
@@ -29,6 +26,7 @@ export function CanvasPage() {
   const engineRef = useRef<Engine | null>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
   const seed = useAtomValue(sketchSeedAtom);
+  const pendingMintLoad = useAtomValue(pendingMintLoadAtom);
   const { isOverlayOpen, openOverlay, closeOverlay } = useOverlay();
 
   const [canvasBottom, setCanvasBottom] = useState(0);
@@ -40,9 +38,8 @@ export function CanvasPage() {
     }
   }, []);
 
-  // --- No-wallet path: create engine immediately, open overlay ---
+  // Create engine and open overlay on mount (or when seed changes)
   useEffect(() => {
-    if (hadWallet) return; // wallet path handled separately
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -50,7 +47,8 @@ export function CanvasPage() {
     engineRef.current = eng;
     setEngine(eng);
     eng.start();
-    openOverlay('sketch');
+    // Default to sketch overlay unless arriving from a successful mint
+    if (!pendingMintLoad) openOverlay('sketch');
     computeCanvasBottom();
 
     // Let a few frames render so the canvas isn't blank, then freeze
@@ -124,7 +122,11 @@ export function CanvasPage() {
     <div className="fixed inset-0 bg-black flex items-center justify-center">
       <canvas
         ref={canvasRef}
-        className={cn('z-10 max-h-full max-w-full object-contain touch-none transition-transform duration-500 ease-in-out', isOverlayOpen && 'canvas-overlay-glow')}
+        className={cn(
+          'z-10 max-h-full max-w-full object-contain touch-none transition-transform duration-500 ease-in-out',
+          isOverlayOpen && 'canvas-overlay-glow',
+          !engine && 'bg-[rgba(0,255,128,0.1)]',
+        )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
