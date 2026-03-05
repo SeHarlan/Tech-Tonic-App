@@ -32,7 +32,7 @@ function assetToNftItem(asset: DasAsset): NftItem {
   const seedAttr = attrs.find((a) => a.trait_type === 'Seed');
   const seed = seedAttr ? Number(seedAttr.value) : 0;
   const frameCountAttr = attrs.find((a) => a.trait_type === 'Frame Count');
-  const frameCount = frameCountAttr ? Number(frameCountAttr.value) : 3600;
+  const frameCount = frameCountAttr ? Number(frameCountAttr.value) : 33 * 60;
 
   // Image URL priority — prefer raw gateway URLs for CORS compatibility (needed by
   // WebGL texImage2D with crossOrigin='anonymous'). The Helius CDN proxy does not

@@ -796,10 +796,19 @@ export function createEngine(config: EngineConfig): Engine {
         el.src = imageUrl;
       });
 
-      // Load image into both ping-pong framebuffer textures
+      // Flip vertically: stored PNGs use top-left origin, WebGL uses bottom-left
+      const flipCanvas = document.createElement('canvas');
+      flipCanvas.width = canvas.width;
+      flipCanvas.height = canvas.height;
+      const ctx = flipCanvas.getContext('2d')!;
+      ctx.translate(0, flipCanvas.height);
+      ctx.scale(1, -1);
+      ctx.drawImage(img, 0, 0, flipCanvas.width, flipCanvas.height);
+
+      // Load flipped image into both ping-pong framebuffer textures
       for (const tex of ppTextures) {
         gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flipCanvas);
       }
 
       // Clear movement and paint textures (no drawing data to restore)
