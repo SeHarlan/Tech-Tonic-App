@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from '@metaplex-foundation/umi';
 import { useAccount, useTransactionSigner } from '@solana/connector';
-import { RPC_ENDPOINT } from '../config/env';
+import { RPC_ENDPOINT } from '../../config/env';
 
 /**
  * Bridge @solana/connector's TransactionSigner to Umi's Signer interface.

@@ -23,6 +23,24 @@ import {
 import { readFile, writeFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
+import {
+  COLLECTION_NAME,
+  COLLECTION_DESCRIPTION,
+  NAME_PREFIX,
+  CONFIG_LINES_BATCH_SIZE,
+  ROYALTY_BPS,
+  ROYALTY_WALLET,
+  BOT_TAX_SOL,
+  MINT_LIMIT,
+  MINT_PRICE_SOL,
+  MINT_PRICE_SKR,
+  SKR_MINT,
+  SKR_DECIMALS,
+  ADMIN_WALLETS,
+  PHASE_DURATION_MS,
+  MINT_START_TIME,
+  RPC_ENDPOINT,
+} from '../config/env';
 
 // --- Types ---
 
@@ -33,37 +51,13 @@ interface ConfigLine {
 
 // --- Constants ---
 
-const COLLECTION_NAME = 'TechTonic Season One';
-const COLLECTION_DESCRIPTION =
-  'The first TechTonic generative art collection.';
-const NAME_PREFIX = 'TechTonic #';
-const CONFIG_LINES_BATCH_SIZE = 10;
-const ROYALTY_BPS = 1000; // 10% royalty
 const DEFAULT_PRICE_SOL = MINT_PRICE_SOL;
-const MINT_LIMIT = 3;
-const ROYALTY_WALLET = 'EZAdWMUWCKSPH6r6yNysspQsZULwT9zZPqQzRhrUNwDX';
-const BOT_TAX_SOL = 0.001;
-
-// SKR token payment (Seeker coin — mainnet only, won't exist on devnet)
-const SKR_MINT = 'SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3';
-const SKR_DECIMALS = 6;
-const SKR_PRICE = MINT_PRICE_SKR; // ~2/3 SOL-equivalent at current rates, adjust as needed
-
-// Admin wallets for free preminting (allowList guard group)
-const ADMIN_WALLETS = [
-  'EZAdWMUWCKSPH6r6yNysspQsZULwT9zZPqQzRhrUNwDX',
-  'HsnsEpjV2nqUukLmyRTkurgXf37u7fi8pRbDuLJmdcN1',
-];
-
-// Mint phase timing — keep in sync with VITE_MINT_START_TIME / src/config/env.ts
-// This is when the Seeker Only phase begins; admin premint starts 24h before.
-const MINT_START_TIME = process.env.MINT_START_TIME || '2026-04-01T00:00:00Z';
-const PHASE_DURATION_MS = 24 * 60 * 60 * 1000; // 24h
+const SKR_PRICE = MINT_PRICE_SKR;
 
 const DEFAULT_CONFIG_LINES = './generated/config-lines.json';
 const DEFAULT_KEYPAIR = join(homedir(), '.config/solana/id.json');
 const DEFAULT_CLUSTER = 'devnet';
-const DEFAULT_RPC = 'https://devnet.helius-rpc.com/?api-key=1d9d2afb-b8c1-40b1-ba66-063071d49ea3';
+const DEFAULT_RPC = RPC_ENDPOINT;
 
 // --- Arg parsing ---
 

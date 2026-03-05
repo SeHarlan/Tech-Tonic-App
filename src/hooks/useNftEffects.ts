@@ -1,7 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useSetAtom } from 'jotai';
 import { useAccount, useConnector } from '@solana/connector';
-import { COLLECTION_ADDRESS } from '../config/env';
+import { COLLECTION_ADDRESS } from '../../config/env';
 import {
   fetchCollectionAssets,
   fetchOwnedCollectionAssets,

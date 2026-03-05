@@ -5,7 +5,7 @@ import {
   MINT_START_TIME,
   MINT_PHASES,
   type MintPhase,
-} from '../../config/env';
+} from '../../../config/env';
 
 export interface PhaseState {
   phase: MintPhase;

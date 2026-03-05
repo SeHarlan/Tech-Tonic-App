@@ -1,4 +1,4 @@
-import { RPC_ENDPOINT, DEMO_MODE } from '../config/env';
+import { RPC_ENDPOINT, DEMO_MODE } from '../../config/env';
 
 export interface NftAttribute {
   trait_type: string;

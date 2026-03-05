@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { AppProvider } from '@solana/connector/react';
 import { getDefaultConfig, getDefaultMobileConfig } from '@solana/connector/headless';
-import { CLUSTER, RPC_ENDPOINT } from '../config/env';
+import { CLUSTER, RPC_ENDPOINT } from '../../config/env';
 import { APP_NAME } from '../utils/contants';
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {

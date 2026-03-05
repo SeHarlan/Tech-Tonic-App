@@ -19,7 +19,7 @@ import { setComputeUnitLimit, setComputeUnitPrice } from '@metaplex-foundation/m
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
 import { useUmi } from '../../hooks/useUmi';
-import { CANDY_MACHINE_ADDRESS, DEMO_MODE, MINT_PRICE_SOL, MINT_PRICE_SKR, SKR_MINT } from '../../config/env';
+import { CANDY_MACHINE_ADDRESS, DEMO_MODE, MINT_PRICE_SOL, MINT_PRICE_SKR, SKR_MINT } from '../../../config/env';
 import { cn } from '../../utils/ui-helpers';
 import { MintTimeline } from './MintTimeline';
 import { useActivePhase } from './useActivePhase';
@@ -184,10 +184,10 @@ export function MintPage() {
       }
 
       setStatus('success');
-      setRetrieving(false);
-
-      await new Promise((r) => setTimeout(r, 1200));
       setRetrieving(true);
+
+      // Wait for DAS indexing before polling — avoids wasted 400s on the first request
+      await new Promise((r) => setTimeout(r, 5000));
 
       // Poll DAS until the new asset appears
       const prevIds = prevOwnedIdsRef.current;
@@ -207,6 +207,8 @@ export function MintPage() {
       console.error('[Mint] Error:', err);
       setStatus('error');
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRetrieving(false);
     }
   };
 

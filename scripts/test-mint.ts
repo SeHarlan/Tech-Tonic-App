@@ -20,16 +20,11 @@ import { setComputeUnitLimit } from '@metaplex-foundation/mpl-toolbox';
 import { readFile } from 'fs/promises';
 import { resolve, join } from 'path';
 import { homedir } from 'os';
+import { ADMIN_WALLETS, RPC_ENDPOINT } from '../config/env';
 
 const CM_ADDRESS = ''; // Set after running create-candy-machine
-const RPC = 'https://devnet.helius-rpc.com/?api-key=1d9d2afb-b8c1-40b1-ba66-063071d49ea3';
+const RPC = RPC_ENDPOINT;
 const DEFAULT_KEYPAIR = join(homedir(), '.config/solana/id.json');
-
-// Must match create-candy-machine.ts
-const ADMIN_WALLETS = [
-  'EZAdWMUWCKSPH6r6yNysspQsZULwT9zZPqQzRhrUNwDX',
-  'HsnsEpjV2nqUukLmyRTkurgXf37u7fi8pRbDuLJmdcN1',
-];
 
 async function main() {
   const group = process.argv.includes('--admin') ? 'admin' : 'public';

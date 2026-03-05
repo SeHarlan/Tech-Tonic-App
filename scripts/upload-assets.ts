@@ -4,6 +4,7 @@ import { createGenericFile, keypairIdentity } from '@metaplex-foundation/umi';
 import { readFile, writeFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
+import { RPC_ENDPOINT } from '../config/env';
 
 // --- Types ---
 
@@ -36,7 +37,7 @@ const DEFAULT_INPUT = './generated/thumbnails';
 const DEFAULT_OUTPUT = './generated/config-lines.json';
 const DEFAULT_KEYPAIR = join(homedir(), '.config/solana/id.json');
 const DEFAULT_CLUSTER = 'devnet';
-const DEFAULT_RPC = 'https://devnet.helius-rpc.com/?api-key=1d9d2afb-b8c1-40b1-ba66-063071d49ea3';
+const DEFAULT_RPC = RPC_ENDPOINT;
 
 // --- Arg parsing ---
 
