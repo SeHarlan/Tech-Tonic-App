@@ -25,7 +25,7 @@ export function WalletButton() {
     return (
       <MenuButton
         onClick={() => disconnectWallet()}
-        className="wallet-address"
+        className="wallet-address shadow-none!"
       >
         {formatted}
       </MenuButton>

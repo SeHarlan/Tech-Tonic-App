@@ -207,8 +207,8 @@
   text-transform: uppercase;
 }
 
-/* Glow on overlay buttons */
-.canvas-overlay-panel button,
+/* Glow on overlay buttons (exclude bare-text tab buttons) */
+.canvas-overlay-panel button:not(.overlay-tab-btn),
 .wallet-picker button {
   box-shadow:
     0 0 8px rgba(0, 255, 128, 0.6),
@@ -366,6 +366,13 @@
   border: 1px solid rgba(0, 255, 128, 0.5);
   transform: scale(0.8);
   animation: canvas-glow-pulse 7s steps(1) infinite;
+}
+
+/* ===== NFT THUMBNAIL ===== */
+.nft-thumbnail-container {
+  width: 120px;
+  aspect-ratio: 9 / 16;
+  background: rgba(0, 10, 5, 0.5);
 }
 
 /* ===== IMPORT IMAGE DROPZONE ===== */

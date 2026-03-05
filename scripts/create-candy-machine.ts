@@ -7,11 +7,13 @@ import {
   publicKey,
   some,
   sol,
+  dateTime,
 } from '@metaplex-foundation/umi';
 import {
   mplCandyMachine,
   create,
   addConfigLines,
+  getMerkleRoot,
 } from '@metaplex-foundation/mpl-core-candy-machine';
 import {
   mplCore,
@@ -36,11 +38,28 @@ const COLLECTION_DESCRIPTION =
   'The first TechTonic generative art collection.';
 const NAME_PREFIX = 'TechTonic #';
 const CONFIG_LINES_BATCH_SIZE = 10;
-const ROYALTY_BPS = 500; // 5% royalty
-const DEFAULT_PRICE_SOL = 0.01;
+const ROYALTY_BPS = 1000; // 10% royalty
+const DEFAULT_PRICE_SOL = 1.11;
 const MINT_LIMIT = 3;
+const ADMIN_MINT_LIMIT = 10;
 const ROYALTY_WALLET = 'EZAdWMUWCKSPH6r6yNysspQsZULwT9zZPqQzRhrUNwDX';
 const BOT_TAX_SOL = 0.001;
+
+// SKR token payment (Seeker coin — mainnet only, won't exist on devnet)
+const SKR_MINT = 'SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3';
+const SKR_DECIMALS = 6;
+const SKR_PRICE = 4200; // ~2/3 SOL-equivalent at current rates, adjust as needed
+
+// Admin wallets for free preminting (allowList guard group)
+const ADMIN_WALLETS = [
+  'EZAdWMUWCKSPH6r6yNysspQsZULwT9zZPqQzRhrUNwDX',
+  'HsnsEpjV2nqUukLmyRTkurgXf37u7fi8pRbDuLJmdcN1',
+];
+
+// Mint phase timing — keep in sync with VITE_MINT_START_TIME / src/config/env.ts
+// This is when the Seeker Only phase begins; admin premint starts 24h before.
+const MINT_START_TIME = process.env.MINT_START_TIME || '2026-04-01T00:00:00Z';
+const PHASE_DURATION_MS = 24 * 60 * 60 * 1000; // 24h
 
 const DEFAULT_CONFIG_LINES = './generated/config-lines.json';
 const DEFAULT_KEYPAIR = join(homedir(), '.config/solana/id.json');
@@ -206,6 +225,9 @@ async function main() {
   console.log(`  Name prefix: "${NAME_PREFIX}" + ${maxNameSuffix} chars`);
   console.log(`  URI prefix:  "${uriPrefix}" + ${maxUriSuffix} chars`);
 
+  // Build admin allowList merkle root
+  const adminMerkleRoot = getMerkleRoot(ADMIN_WALLETS);
+
   const candyMachine = generateSigner(umi);
   const createBuilder = await create(umi, {
     candyMachine,
@@ -220,14 +242,53 @@ async function main() {
       uriLength: maxUriSuffix,
       isSequential: false,
     }),
+    // Default guards shared by all groups
     guards: {
       botTax: some({ lamports: sol(BOT_TAX_SOL), lastInstruction: true }),
-      solPayment: some({
-        lamports: sol(args.price),
-        destination: publicKey(ROYALTY_WALLET),
-      }),
-      mintLimit: some({ id: 1, limit: MINT_LIMIT }),
     },
+    // Phase timing — derive from MINT_START_TIME
+    // Admin: starts immediately (no startDate), no end
+    // SKR:   MINT_START_TIME → +24h
+    // Public: MINT_START_TIME + 24h → no end
+    groups: (() => {
+      const mintStartMs = new Date(MINT_START_TIME).getTime();
+      const skrStartSec = Math.floor(mintStartMs / 1000);
+      const skrEndSec = Math.floor((mintStartMs + PHASE_DURATION_MS) / 1000);
+      const publicStartSec = skrEndSec;
+
+      return [
+        {
+          label: 'admin',
+          guards: {
+            allowList: some({ merkleRoot: adminMerkleRoot }),
+          },
+        },
+        {
+          label: 'public',
+          guards: {
+            solPayment: some({
+              lamports: sol(args.price),
+              destination: publicKey(ROYALTY_WALLET),
+            }),
+            mintLimit: some({ id: 1, limit: MINT_LIMIT }),
+            startDate: some({ date: dateTime(publicStartSec) }),
+          },
+        },
+        {
+          label: 'skr',
+          guards: {
+            tokenPayment: some({
+              amount: BigInt(SKR_PRICE) * BigInt(10 ** SKR_DECIMALS),
+              mint: publicKey(SKR_MINT),
+              destinationAta: publicKey(ROYALTY_WALLET),
+            }),
+            mintLimit: some({ id: 3, limit: MINT_LIMIT }),
+            startDate: some({ date: dateTime(skrStartSec) }),
+            endDate: some({ date: dateTime(skrEndSec) }),
+          },
+        },
+      ];
+    })(),
   });
   await createBuilder.sendAndConfirm(umi, { confirm: { commitment: 'finalized' } });
 
@@ -275,10 +336,10 @@ async function main() {
   console.log(`  Items:         ${configLines.length}`);
   console.log(`  Price:         ${args.price} SOL`);
   console.log(`  Royalties:     ${ROYALTY_BPS / 100}% (enforced via Core plugin)`);
-  console.log(`  Guards:        solPayment, mintLimit(${MINT_LIMIT}), botTax`);
+  console.log(`  Guards:        botTax (default), solPayment + mintLimit(${MINT_LIMIT}) (public), allowList + mintLimit(${ADMIN_MINT_LIMIT}) (admin)`);
   console.log(`  Output:        ${outputPath}`);
   console.log(
-    `\nAdd to your .env:\n  VITE_CANDY_MACHINE_ADDRESS=${candyMachine.publicKey}\n`,
+    `\nAdd to your .env:\n  VITE_CANDY_MACHINE_ADDRESS=${candyMachine.publicKey} for demo mode\n  VITE_SEASON_ONE_CANDY_MACHINE_ADDRESS=${candyMachine.publicKey} for live mode\n`,
   );
 }
 
