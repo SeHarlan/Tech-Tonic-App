@@ -339,7 +339,12 @@ async function main() {
   console.log(`  Guards:        botTax (default), solPayment + mintLimit(${MINT_LIMIT}) (public), allowList + mintLimit(${ADMIN_MINT_LIMIT}) (admin)`);
   console.log(`  Output:        ${outputPath}`);
   console.log(
-    `\nAdd to your .env:\n  VITE_CANDY_MACHINE_ADDRESS=${candyMachine.publicKey} for demo mode\n  VITE_SEASON_ONE_CANDY_MACHINE_ADDRESS=${candyMachine.publicKey} for live mode\n`,
+    `\nAdd to your .env:` +
+    `\n  VITE_CANDY_MACHINE_ADDRESS=${candyMachine.publicKey}` +
+    `\n  VITE_COLLECTION_ADDRESS=${collectionSigner.publicKey}` +
+    `\n\nFor Season One (live), set:` +
+    `\n  VITE_SEASON_ONE_CANDY_MACHINE_ADDRESS=${candyMachine.publicKey}` +
+    `\n  VITE_SEASON_ONE_COLLECTION_ADDRESS=${collectionSigner.publicKey}\n`,
   );
 }
 

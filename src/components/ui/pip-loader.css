@@ -1,0 +1,54 @@
+/* PipLoader — Pip-Boy / CRT loading indicator */
+
+.pip-loader {
+  --pip-green: rgba(0, 255, 128, 1);
+  --pip-green-dim: rgba(0, 255, 128, 0.35);
+  --pip-green-glow: rgba(0, 255, 128, 0.15);
+  --pip-bg: rgba(0, 8, 4, 0.92);
+}
+
+/* Stepped loading bar fill */
+@keyframes pip-loader-fill {
+  0% { width: 0%; }
+  10% { width: 12%; }
+  25% { width: 25%; }
+  40% { width: 38%; }
+  55% { width: 55%; }
+  70% { width: 68%; }
+  85% { width: 82%; }
+  95% { width: 95%; }
+  100% { width: 100%; }
+}
+
+@keyframes pip-loader-loop {
+  0%, 100% { width: 0%; }
+  50% { width: 100%; }
+}
+
+/* Text flicker */
+@keyframes pip-text-flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.4; }
+  94% { opacity: 1; }
+  96% { opacity: 0.6; }
+  97% { opacity: 1; }
+}
+
+.pip-loader-bar-fill {
+  animation: pip-loader-loop 2.4s steps(8) infinite;
+}
+
+.pip-loader-label {
+  animation: pip-text-flicker 3s infinite;
+}
+
+.pip-loader-scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 128, 0.03) 2px,
+    rgba(0, 255, 128, 0.03) 4px
+  );
+}

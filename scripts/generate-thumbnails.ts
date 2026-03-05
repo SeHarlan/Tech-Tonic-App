@@ -228,6 +228,7 @@ async function main() {
       const params = randomizeShaderParameters(seed);
       const attributes: NftAttribute[] = [
         { trait_type: 'Seed', value: String(seed) },
+        { trait_type: 'Frame Count', value: String(totalFrameCount) },
         { trait_type: 'Pattern', value: params.fxWithBlocking ? 'Blocked' : 'Flowing' },
         { trait_type: 'Block Scale', value: String(params.blockingScale) },
         { trait_type: 'Waterfall', value: params.defaultWaterfallMode ? 'On' : 'Off' },

@@ -25,10 +25,11 @@ function indexFromId(list: NftItem[], id: string | null): number {
 
 interface CanvasOverlayProps {
   canvasBottom: number;
-  onClose: (selectedSeed?: number) => void;
+  onClose: (selectedNft?: NftItem) => void;
+  showTouchPrompt?: boolean;
 }
 
-export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose }: CanvasOverlayProps) {
+export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose, showTouchPrompt }: CanvasOverlayProps) {
   const navigate = useNavigate();
   const { overlayTab, setOverlayTab, hasOwned } = useOverlayWithNfts();
   const { ownedNfts, discoverNfts } = useNftStore();
@@ -64,7 +65,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose }: CanvasOv
 
   const handleClose = useCallback(() => {
     if (activeTab !== 'sketch' && currentNft) {
-      onClose(currentNft.seed);
+      onClose(currentNft);
     } else {
       onClose();
     }
@@ -94,6 +95,13 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, onClose }: CanvasOv
       {/* Full-screen NFT browser (image + arrows + swipe) — behind overlay effects */}
       {isBrowsing && (
         <NftBrowser items={browserItems} index={browseIndex} onNavigate={handleNavigate} />
+      )}
+
+      {/* Touch prompt — centered, doesn't intercept clicks */}
+      {showTouchPrompt && activeTab === 'sketch' && (
+        <p className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 font-mono text-sm tracking-[0.2em] uppercase text-[rgba(0,255,128,0.5)] animate-pulse">
+          touch anywhere to begin
+        </p>
       )}
 
       {/* Static scanlines over entire overlay */}

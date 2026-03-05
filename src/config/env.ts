@@ -22,6 +22,12 @@ export const CANDY_MACHINE_ADDRESS = DEMO_MODE
   ? (import.meta.env.VITE_CANDY_MACHINE_ADDRESS || '')
   : (import.meta.env.VITE_SEASON_ONE_CANDY_MACHINE_ADDRESS || '');
 
+// Collection address — static, derived from the candy machine's collectionMint.
+// Set via env to avoid a runtime RPC call on every page load.
+export const COLLECTION_ADDRESS = DEMO_MODE
+  ? (import.meta.env.VITE_COLLECTION_ADDRESS || '')
+  : (import.meta.env.VITE_SEASON_ONE_COLLECTION_ADDRESS || '');
+
 // Mint prices — keep in sync with scripts/create-candy-machine.ts
 export const MINT_PRICE_SOL = 1.11;
 export const MINT_PRICE_SKR = 4200;

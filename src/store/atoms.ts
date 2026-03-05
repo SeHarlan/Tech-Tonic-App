@@ -12,7 +12,6 @@ export const activeOwnedNftIdAtom = atomWithStorage<string | null>('activeOwnedN
 export const activeDiscoverNftIdAtom = atomWithStorage<string | null>('activeDiscoverNftId', null);
 
 // --- NFT ---
-export const collectionAddressAtom = atom<string | null>(null);
 export const discoverNftsAtom = atom<NftItem[]>([]);
 export const ownedNftsAtom = atom<NftItem[]>([]);
 export const isLoadingDiscoverAtom = atom(false);

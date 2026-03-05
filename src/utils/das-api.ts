@@ -1,4 +1,4 @@
-import { RPC_ENDPOINT } from '../config/env';
+import { RPC_ENDPOINT, DEMO_MODE } from '../config/env';
 
 export interface NftAttribute {
   trait_type: string;
@@ -9,6 +9,7 @@ export interface NftItem {
   id: string;
   name: string;
   seed: number;
+  frameCount: number;
   thumbnailUrl: string;
   attributes: NftAttribute[];
 }
@@ -30,19 +31,30 @@ function assetToNftItem(asset: DasAsset): NftItem {
   const attrs = asset.content.metadata.attributes ?? [];
   const seedAttr = attrs.find((a) => a.trait_type === 'Seed');
   const seed = seedAttr ? Number(seedAttr.value) : 0;
+  const frameCountAttr = attrs.find((a) => a.trait_type === 'Frame Count');
+  const frameCount = frameCountAttr ? Number(frameCountAttr.value) : 3600;
 
-  // Image URL priority (per Helius DAS docs):
-  //  1. cdn_uri from the first image file — Helius CDN proxy, most reliable
-  //  2. content.links.image — canonical image from metadata JSON
-  //  3. files[].uri from the first image file — raw gateway URL (Irys/Arweave/etc.)
+  // Image URL priority — prefer raw gateway URLs for CORS compatibility (needed by
+  // WebGL texImage2D with crossOrigin='anonymous'). The Helius CDN proxy does not
+  // serve Access-Control-Allow-Origin headers.
+  //  1. content.links.image — canonical image URL from metadata JSON (Arweave/Irys gateway)
+  //  2. files[].uri — raw gateway URL
+  //  3. files[].cdn_uri — Helius CDN proxy (fallback; won't work for WebGL cross-origin)
   const imageFile = asset.content.files?.find((f) => f.mime.startsWith('image/'));
-  const imageUrl =
-    imageFile?.cdn_uri ?? asset.content.links?.image ?? imageFile?.uri ?? '';
+  let imageUrl =
+    asset.content.links?.image ?? imageFile?.uri ?? imageFile?.cdn_uri ?? '';
+
+  // Devnet assets are uploaded to the devnet Irys node but metadata references
+  // the mainnet gateway. Rewrite to the devnet gateway in demo mode.
+  if (DEMO_MODE && imageUrl.includes('gateway.irys.xyz')) {
+    imageUrl = imageUrl.replace('gateway.irys.xyz', 'devnet.irys.xyz');
+  }
 
   return {
     id: asset.id,
     name: asset.content.metadata.name,
     seed,
+    frameCount,
     thumbnailUrl: imageUrl,
     attributes: attrs,
   };
