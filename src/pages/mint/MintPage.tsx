@@ -13,6 +13,7 @@ import {
   mintV1,
   fetchCandyMachine,
   fetchCandyGuard,
+  fetchMintCounterFromSeeds,
   type DefaultGuardSetMintArgs,
 } from '@metaplex-foundation/mpl-core-candy-machine';
 import { setComputeUnitLimit, setComputeUnitPrice } from '@metaplex-foundation/mpl-toolbox';
@@ -117,6 +118,11 @@ export function MintPage() {
       const candyMachine = await fetchCandyMachine(umi, cmPublicKey);
       const candyGuard = await fetchCandyGuard(umi, candyMachine.mintAuthority);
 
+      // --- Pre-validation: check capacity ---
+      if (candyMachine.itemsRedeemed >= candyMachine.data.itemsAvailable) {
+        throw new Error('Collection is fully minted — no items remaining.');
+      }
+
       // Build mintArgs from on-chain guard data per Metaplex docs
       const guardGroup = candyGuard.groups.find((g) => g.label === group);
       if (!guardGroup) {
@@ -142,6 +148,28 @@ export function MintPage() {
         }
         const mintLimit = unwrapOption(guards.mintLimit);
         if (mintLimit) mintArgs.mintLimit = some({ id: mintLimit.id });
+      }
+
+      // --- Pre-validation: check per-wallet mint limit ---
+      const mintLimitGuard = unwrapOption(guards.mintLimit);
+      if (mintLimitGuard) {
+        try {
+          const counter = await fetchMintCounterFromSeeds(umi, {
+            id: mintLimitGuard.id,
+            user: umi.identity.publicKey,
+            candyMachine: cmPublicKey,
+            candyGuard: candyGuard.publicKey,
+          });
+          if (counter.count >= mintLimitGuard.limit) {
+            throw new Error(
+              `Wallet mint limit reached (${counter.count}/${mintLimitGuard.limit}). Each wallet can only mint ${mintLimitGuard.limit} from this collection.`,
+            );
+          }
+        } catch (e) {
+          // If the counter PDA doesn't exist, the wallet hasn't minted yet — that's fine.
+          // Re-throw only if it's our own limit-reached error.
+          if (e instanceof Error && e.message.includes('mint limit reached')) throw e;
+        }
       }
 
       const asset = generateSigner(umi);
@@ -270,11 +298,16 @@ export function MintPage() {
             </p>
 
             {/* Mint count */}
-            
+
             <p className="font-mono text-xs text-[rgba(0,255,128,0.5)] tracking-[0.2em] -mt-4">
-              {mintCount ? (<span>{mintCount.minted} / {mintCount.total} minted</span>) : (<span>Loading...</span>)}
+              {mintCount ? (
+                <span>
+                  {mintCount.minted} / {mintCount.total} minted
+                </span>
+              ) : (
+                <span>Loading...</span>
+              )}
             </p>
-            
 
             {/* Description */}
             <p className="text-center text-sm text-[rgba(0,255,128,0.55)] font-mono max-w-xs leading-relaxed -mt-2">
@@ -284,45 +317,49 @@ export function MintPage() {
             <div className="mint-separator" />
 
             {/* Action area */}
-            {!isConnected ? (
-              <div className="flex flex-col items-center gap-5">
-                <p className="text-[rgba(0,255,128,0.4)] font-mono text-xs uppercase tracking-widest">
-                  Wallet Required
-                </p>
-                <WalletButton />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-5">
-                {status === "idle" && (
-                  <>
-                    {/* Payment toggle */}
-                    <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-[0.15em] uppercase">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('sol')}
-                        className={cn(
-                          "overlay-tab-btn bg-transparent border-none cursor-pointer whitespace-nowrap px-0.5 py-0",
-                          paymentMethod === 'sol'
-                            ? "text-[rgb(0,255,128)]"
-                            : "text-[rgba(0,255,128,0.35)] hover:text-[rgba(0,255,128,0.55)]",
-                        )}
-                      >
-                        {paymentMethod === 'sol' ? '[ SOL ]' : 'SOL'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod('skr')}
-                        className={cn(
-                          "overlay-tab-btn bg-transparent border-none cursor-pointer whitespace-nowrap px-0.5 py-0",
-                          paymentMethod === 'skr'
-                            ? "text-[rgb(0,255,128)]"
-                            : "text-[rgba(0,255,128,0.35)] hover:text-[rgba(0,255,128,0.55)]",
-                        )}
-                      >
-                        {paymentMethod === 'skr' ? '[ SKR ]' : 'SKR'}
-                      </button>
-                    </div>
 
+            <div className="flex flex-col items-center gap-5">
+              {status === "idle" && (
+                <>
+                  {/* Payment toggle */}
+                  <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-[0.15em] uppercase">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("sol")}
+                      className={cn(
+                        "overlay-tab-btn bg-transparent border-none cursor-pointer whitespace-nowrap px-0.5 py-0",
+                        paymentMethod === "sol"
+                          ? "text-[rgb(0,255,128)]"
+                          : "text-[rgba(0,255,128,0.35)] hover:text-[rgba(0,255,128,0.55)]",
+                      )}
+                    >
+                      {paymentMethod === "sol" ? "[ SOL ]" : "SOL"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("skr")}
+                      className={cn(
+                        "overlay-tab-btn bg-transparent border-none cursor-pointer whitespace-nowrap px-0.5 py-0",
+                        paymentMethod === "skr"
+                          ? "text-[rgb(0,255,128)]"
+                          : "text-[rgba(0,255,128,0.35)] hover:text-[rgba(0,255,128,0.55)]",
+                      )}
+                    >
+                      {paymentMethod === "skr" ? "[ SKR ]" : "SKR"}
+                    </button>
+                  </div>
+
+                  {!isConnected ? (
+                    <MenuButton
+                      onClick={handleMint}
+                      disabled
+                      className={cn(
+                        "text-xl px-10 py-3 tracking-[0.15em] uppercase mt-2",
+                      )}
+                    >
+                      Wallet Required
+                    </MenuButton>
+                  ) : (
                     <MenuButton
                       onClick={handleMint}
                       disabled={!mintEnabled}
@@ -333,57 +370,62 @@ export function MintPage() {
                     >
                       Mint
                     </MenuButton>
-                    {/* Price */}
-                    <p className="font-mono text-lg text-[rgba(0,255,128,0.85)] tracking-widest">
-                      {paymentMethod === 'skr'
-                        ? `${priceSkr.toLocaleString()} SKR`
-                        : `${priceSol} SOL`}
-                    </p>
-                  </>
-                )}
-
-                {status === "minting" && (
-                  <p className="mint-status-minting text-[rgba(0,255,128,0.7)] font-mono animate-pulse tracking-widest uppercase">
-                    Minting...
+                  )}
+                  {/* Price */}
+                  <p className="font-mono text-lg text-[rgba(0,255,128,0.85)] tracking-widest">
+                    {paymentMethod === "skr"
+                      ? `${priceSkr.toLocaleString()} SKR`
+                      : `${priceSol} SOL`}
                   </p>
-                )}
+                </>
+              )}
 
-                {status === "success" && (
-                  <div className="flex flex-col items-center gap-2">
-                    <p className="mint-status-success text-[rgba(0,255,128,0.9)] font-mono tracking-wide">
-                      Minted!
-                    </p>
-                    {retrieving && (
-                      <p className="text-[rgba(0,255,128,0.4)] font-mono text-xs animate-pulse tracking-widest uppercase">
-                        Retrieving from chain...
-                      </p>
-                    )}
-                  </div>
-                )}
+              {status === "minting" && (
+                <p className="mint-status-minting text-[rgba(0,255,128,0.7)] font-mono animate-pulse tracking-widest uppercase">
+                  Minting...
+                </p>
+              )}
 
-                {status === "error" && (
-                  <div className="flex flex-col items-center gap-4">
-                    <p className="mint-status-error text-red-400 font-mono text-sm text-center max-h-50 overflow-auto">
-                      {error}
+              {status === "success" && (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="mint-status-success text-[rgba(0,255,128,0.9)] font-mono tracking-wide">
+                    Minted!
+                  </p>
+                  {retrieving && (
+                    <p className="text-[rgba(0,255,128,0.4)] font-mono text-xs animate-pulse tracking-widest uppercase">
+                      Retrieving from chain...
                     </p>
-                    <MenuButton onClick={() => setStatus("idle")}>
-                      Try Again
-                    </MenuButton>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+
+              {status === "error" && (
+                <div className="flex flex-col items-center gap-4">
+                  <p className="mint-status-error text-red-400 font-mono text-sm text-center max-h-50 overflow-auto">
+                    {error}
+                  </p>
+                  <MenuButton onClick={() => setStatus("idle")}>
+                    Try Again
+                  </MenuButton>
+                </div>
+              )}
+            </div>
 
             {/* Bottom separator */}
             <div className="mint-separator" />
 
-            {/* Back button */}
-            <MenuButton
-              onClick={() => navigate("/")}
-              className="text-sm tracking-widest"
-            >
-              Back
-            </MenuButton>
+            <div className="flex flex-row items-center justify-center gap-4">
+              <MenuButton
+                onClick={() => navigate("/")}
+                className="text-sm tracking-widest"
+              >
+                Home
+              </MenuButton>
+              <WalletButton
+                className={cn("text-sm tracking-widest mint-action-btn", !isConnected && "mint-action-btn")}
+            
+              />
+            </div>
           </div>
         </div>
       </div>

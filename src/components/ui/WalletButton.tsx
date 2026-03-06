@@ -11,21 +11,21 @@ const FALLBACK_WALLETS = [
   { name: 'Backpack', url: 'https://backpack.app/' },
 ];
 
-export function WalletButton() {
+export function WalletButton({ className }: { className?: string }) {
   const [picking, setPicking] = useState(false);
   const { connectors, connectWallet, disconnectWallet, isConnected, isConnecting } =
     useConnector();
   const { formatted } = useAccount();
 
   if (isConnecting) {
-    return <MenuButton disabled>Connecting...</MenuButton>;
+    return <MenuButton disabled className={className}>Connecting...</MenuButton>;
   }
 
   if (isConnected) {
     return (
       <MenuButton
         onClick={() => disconnectWallet()}
-        className="wallet-address shadow-none!"
+        className={cn("wallet-address shadow-none!", className)}
       >
         {formatted}
       </MenuButton>
@@ -71,7 +71,7 @@ export function WalletButton() {
   return (
     <>
       {typeof document !== 'undefined' && createPortal(modal, document.body)}
-      <MenuButton disabled={picking} onClick={() => setPicking(true)}>Connect Wallet</MenuButton>
+      <MenuButton disabled={picking} onClick={() => setPicking(true)} className={className}>Connect Wallet</MenuButton>
     </>
   )
 }
