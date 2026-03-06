@@ -440,9 +440,6 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
         case 'toggleGlobalFreeze':
           isActive = state.globalFreeze;
           break;
-        case 'toggleManualMode':
-          isActive = state.manualMode;
-          break;
       }
 
       btn.classList.toggle('active', isActive);
@@ -480,6 +477,18 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
       if (icon) {
         icon.textContent = state.globalFreeze ? '▶' : '⏸\uFE0E';
       }
+    }
+
+    // Update manual/organic toggle
+    const modeToggle = document.getElementById('mode-toggle');
+    if (modeToggle) {
+      modeToggle.classList.toggle('manual-active', state.manualMode);
+      modeToggle.classList.toggle('organic-active', !state.manualMode);
+
+      const manualLabel = modeToggle.querySelector('[data-mode="manual"]');
+      const organicLabel = modeToggle.querySelector('[data-mode="organic"]');
+      if (manualLabel) manualLabel.classList.toggle('active-label', state.manualMode);
+      if (organicLabel) organicLabel.classList.toggle('active-label', !state.manualMode);
     }
 
   }

@@ -40,7 +40,8 @@ export async function loadNftIntoEngineAsync(engine: Engine, nft: NftItem, draft
     time: draft.meta.time,
   } : undefined;
 
-  await engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode, draftState);
+  const manualMode = draft ? (draft.meta.manualMode ?? false) : nft.manualMode;
+  await engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode, manualMode, draftState);
   renderThenFreeze(engine);
 }
 

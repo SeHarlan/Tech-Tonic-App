@@ -108,6 +108,7 @@ export interface Engine {
     totalFrameCount: number,
     imageUrl: string,
     defaultWaterfallMode?: boolean,
+    manualMode?: boolean,
     draftState?: {
       imageBuffer: Blob;
       movementBuffer: Blob;
@@ -839,7 +840,7 @@ export function createEngine(config: EngineConfig): Engine {
       generateNoiseVolume();
     },
 
-    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean, draftState?: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number; time: number } | null) {
+    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean, manualMode?: boolean, draftState?: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number; time: number } | null) {
       // Load the image/draft BEFORE mutating engine state so a failure
       // (e.g. missing thumbnail) doesn't leave the engine half-updated.
       if (draftState) {
@@ -873,6 +874,7 @@ export function createEngine(config: EngineConfig): Engine {
       }
 
       waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
+      manualModeFlag = manualMode ?? false;
       isPointerDown = false;
     },
 

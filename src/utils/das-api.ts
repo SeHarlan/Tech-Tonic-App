@@ -11,6 +11,8 @@ export interface NftItem {
   seed: number;
   frameCount: number;
   defaultWaterfallMode: boolean;
+  manualMode: boolean;
+  iterations: number;
   thumbnailUrl: string;
   attributes: NftAttribute[];
 }
@@ -36,6 +38,10 @@ function assetToNftItem(asset: DasAsset): NftItem {
   const frameCount = frameCountAttr ? Number(frameCountAttr.value) : 33 * 60;
   const waterfallAttr = attrs.find((a) => a.trait_type === 'Waterfall');
   const defaultWaterfallMode = waterfallAttr ? waterfallAttr.value === 'On' : false;
+  const manualModeAttr = attrs.find((a) => a.trait_type === 'Manual Mode');
+  const manualMode = manualModeAttr ? manualModeAttr.value === 'On' : false;
+  const iterationsAttr = attrs.find((a) => a.trait_type === 'Iterations');
+  const iterations = iterationsAttr ? Number(iterationsAttr.value) : 0;
 
   // Image URL priority — prefer raw gateway URLs for CORS compatibility (needed by
   // WebGL texImage2D with crossOrigin='anonymous'). The Helius CDN proxy does not
@@ -61,6 +67,8 @@ function assetToNftItem(asset: DasAsset): NftItem {
     seed,
     frameCount,
     defaultWaterfallMode,
+    manualMode,
+    iterations,
     thumbnailUrl: imageUrl,
     attributes: attrs,
   };

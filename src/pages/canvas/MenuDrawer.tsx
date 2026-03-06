@@ -12,6 +12,7 @@ export interface MenuDrawerHandle {
 export interface MenuDrawerProps {
   engine: Engine | null;
   onAppMenu?: () => void;
+  onBrushSizeChange?: () => void;
   hidden?: boolean;
 }
 
@@ -116,7 +117,7 @@ function dispatchToEngine(
   }
 }
 
-export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function MenuDrawer({ engine, onAppMenu, hidden }, ref) {
+export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function MenuDrawer({ engine, onAppMenu, onBrushSizeChange, hidden }, ref) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<ReturnType<typeof setupMenu> | null>(null);
 
@@ -125,6 +126,8 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
   useEffect(() => { engineRef.current = engine; });
   const onAppMenuRef = useRef(onAppMenu);
   useEffect(() => { onAppMenuRef.current = onAppMenu; });
+  const onBrushSizeChangeRef = useRef(onBrushSizeChange);
+  useEffect(() => { onBrushSizeChangeRef.current = onBrushSizeChange; });
 
   useImperativeHandle(ref, () => ({
     close: () => menuRef.current?.close(),
@@ -134,6 +137,9 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
     (action: string, state: { brushSize: number; eraseVariant?: string; waterfallVariant?: boolean }) => {
       if (engineRef.current) {
         dispatchToEngine(engineRef.current, action, state);
+      }
+      if (action === 'increaseBrushSize' || action === 'decreaseBrushSize' || action === 'brushSizeChanged') {
+        onBrushSizeChangeRef.current?.();
       }
     },
     [],
@@ -169,6 +175,7 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
       brushSizeIndex: dm.getBrushSizeIndex(),
       brushSize: dm.getBrushSize(),
       waterfallVariant: engine.getWaterfallVariant(),
+      manualMode: engine.isManualMode(),
     });
   }, [engine, hidden]);
 

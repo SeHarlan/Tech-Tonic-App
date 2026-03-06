@@ -38,17 +38,13 @@
 
             <!-- Movement Section -->
             <div class="movement-section">
-                <!-- Global Buttons Row -->
-                <div class="global-row">
-                    <button class="menu-btn" id="btn-manual-mode" data-action="toggleManualMode" title="Manual Mode (X)">
-                        <span class="icon">✎</span>
-                    </button>
-                    <button class="menu-btn" id="btn-global-reset" data-action="globalReset" title="Global Reset">
-                        <span class="icon">⟲</span>
-                    </button>
-                    <button class="menu-btn" id="btn-app-menu" data-action="openAppMenu" title="App Menu (Q)">
-                        <span class="icon">☰</span>
-                    </button>
+                <!-- Manual / Organic Toggle -->
+                <div class="mode-toggle" id="mode-toggle" data-action="toggleManualMode" title="Toggle Manual/Organic Mode (X)">
+                    <span class="mode-toggle-label" data-mode="manual">Manual</span>
+                    <div class="mode-toggle-track">
+                        <div class="mode-toggle-thumb"></div>
+                    </div>
+                    <span class="mode-toggle-label" data-mode="organic">Organic</span>
                 </div>
 
                 <div class="section-label">Movement</div>

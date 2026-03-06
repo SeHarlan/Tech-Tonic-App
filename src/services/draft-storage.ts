@@ -12,6 +12,7 @@ export interface DraftMeta {
   totalFrameCount: number;
   params: ShaderParams;
   defaultWaterfallMode: boolean;
+  manualMode: boolean;
   savedAt: number;
 }
 
@@ -61,6 +62,7 @@ export async function saveDraft(
   nftId: string,
   state: SerializedState,
   defaultWaterfallMode: boolean,
+  manualMode: boolean,
 ): Promise<void> {
   const dir = draftDir(nftId);
 
@@ -72,6 +74,7 @@ export async function saveDraft(
     totalFrameCount: state.totalFrameCount,
     params: state.params,
     defaultWaterfallMode,
+    manualMode,
     savedAt: Date.now(),
   };
 

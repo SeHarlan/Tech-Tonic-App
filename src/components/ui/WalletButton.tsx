@@ -62,7 +62,7 @@ export function WalletButton({ className }: { className?: string }) {
                   </MenuButton>
                 ))}
           </div>
-          <MenuButton onClick={() => setPicking(false)}>Cancel</MenuButton>
+          <MenuButton onClick={() => setPicking(false)} className='shadow-none!'>Cancel</MenuButton>
         </div>
       </div>
     </div>

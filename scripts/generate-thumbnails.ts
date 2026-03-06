@@ -233,6 +233,8 @@ async function main() {
         { trait_type: 'Block Scale', value: String(params.blockingScale) },
         { trait_type: 'Waterfall', value: params.defaultWaterfallMode ? 'On' : 'Off' },
         { trait_type: 'Edge Noise', value: params.blackNoiseEdgeMult === 0 ? 'None' : 'Subtle' },
+        { trait_type: 'Manual Mode', value: 'Off' },
+        { trait_type: 'Iterations', value: '0' },
       ];
 
       metadata.thumbnails.push({ filename, seed, totalFrameCount, attributes });

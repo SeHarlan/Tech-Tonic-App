@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useAtomValue } from 'jotai';
 import { createEngine, type Engine } from '../../engine/renderer';
 import { cn } from '../../utils/ui-helpers';
@@ -7,6 +7,136 @@ import { CanvasOverlay, type SlidePhase } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
 import { sketchSeedAtom, pendingMintLoadAtom, overlayTabAtom } from '../../store/atoms';
 import './canvas-overlay.css';
+
+// --- Brush Overlay ---
+
+interface BrushOverlayHandle {
+  refresh(): void;
+}
+
+interface BrushOverlayProps {
+  engine: Engine | null;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  hidden: boolean;
+}
+
+const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function BrushOverlay({ engine, canvasRef, hidden }, ref) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const visible = useRef(false);
+  const lastPos = useRef<{ x: number; y: number } | null>(null);
+
+  const updatePosition = useCallback((clientX: number, clientY: number) => {
+    lastPos.current = { x: clientX, y: clientY };
+    const el = overlayRef.current;
+    const canvas = canvasRef.current;
+    if (!el || !engine || !canvas || hidden) {
+      if (el) el.style.opacity = '0';
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const brushSize = engine.getDrawingManager().getBrushSize();
+    const params = engine.getParams();
+
+    const displayScaleX = rect.width / canvas.width;
+    const displayScaleY = rect.height / canvas.height;
+    let displayWidth = brushSize * 2 * displayScaleX;
+    let displayHeight = brushSize * 2 * displayScaleY;
+
+    let isSquare = false;
+    if (params.fxWithBlocking) {
+      const blockWidthPx = canvas.width / params.blockingScale;
+      const blockHeightPx = canvas.height / params.blockingScale;
+      displayHeight = brushSize * 2 * (blockHeightPx / blockWidthPx) * displayScaleY;
+      isSquare = true;
+    }
+
+    el.style.left = clientX + 'px';
+    el.style.top = clientY + 'px';
+    el.style.width = displayWidth + 'px';
+    el.style.height = displayHeight + 'px';
+    el.style.borderRadius = isSquare ? '0' : '50%';
+    el.style.opacity = '1';
+    visible.current = true;
+  }, [engine, canvasRef, hidden]);
+
+  const hide = useCallback(() => {
+    if (overlayRef.current) overlayRef.current.style.opacity = '0';
+    visible.current = false;
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || hidden) { hide(); return; }
+
+    function onMouseMove(e: MouseEvent) { updatePosition(e.clientX, e.clientY); }
+    function onMouseEnter(e: MouseEvent) { updatePosition(e.clientX, e.clientY); }
+    function onMouseLeave() { hide(); }
+    function onTouchMove(e: TouchEvent) {
+      const t = e.touches[0];
+      if (t) updatePosition(t.clientX, t.clientY);
+    }
+    function onTouchStart(e: TouchEvent) {
+      const t = e.touches[0];
+      if (t) updatePosition(t.clientX, t.clientY);
+    }
+    function onTouchEnd() { hide(); }
+    function onPointerMove(e: PointerEvent) {
+      if (e.pointerType === 'touch') return;
+      updatePosition(e.clientX, e.clientY);
+    }
+    function onPointerLeave() { hide(); }
+
+    canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mouseenter', onMouseEnter);
+    canvas.addEventListener('mouseleave', onMouseLeave);
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchend', onTouchEnd);
+    canvas.addEventListener('touchcancel', onTouchEnd);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerleave', onPointerLeave);
+
+    return () => {
+      canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mouseenter', onMouseEnter);
+      canvas.removeEventListener('mouseleave', onMouseLeave);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchend', onTouchEnd);
+      canvas.removeEventListener('touchcancel', onTouchEnd);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+    };
+  }, [canvasRef, hidden, updatePosition, hide]);
+
+  const refresh = useCallback(() => {
+    if (visible.current && lastPos.current) {
+      updatePosition(lastPos.current.x, lastPos.current.y);
+    }
+  }, [updatePosition]);
+
+  useImperativeHandle(ref, () => ({ refresh }), [refresh]);
+
+  useEffect(() => { if (hidden) hide(); }, [hidden, hide]);
+
+  return (
+    <div
+      ref={overlayRef}
+      style={{
+        position: 'fixed',
+        pointerEvents: 'none',
+        border: '2px solid rgba(0, 255, 128, 0.7)',
+        borderRadius: '50%',
+        background: 'transparent',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 100,
+        opacity: 0,
+        transition: 'opacity 0.15s ease, border-radius 0s',
+      }}
+    />
+  );
+});
 
 const SLIDE_DURATION_MS = 350;
 const CANVAS_OVERLAY_SCALE = 0.8;
@@ -27,6 +157,7 @@ function toCanvasCoords(
 export function CanvasPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuDrawerRef = useRef<MenuDrawerHandle>(null);
+  const brushOverlayRef = useRef<BrushOverlayHandle>(null);
   const engineRef = useRef<Engine | null>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
   const seed = useAtomValue(sketchSeedAtom);
@@ -196,7 +327,8 @@ export function CanvasPage() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       />
-      <MenuDrawer ref={menuDrawerRef} engine={engine} onAppMenu={toggleOverlay} hidden={isOverlayOpen} />
+      <BrushOverlay ref={brushOverlayRef} engine={engine} canvasRef={canvasRef} hidden={isOverlayOpen} />
+      <MenuDrawer ref={menuDrawerRef} engine={engine} onAppMenu={toggleOverlay} onBrushSizeChange={() => brushOverlayRef.current?.refresh()} hidden={isOverlayOpen} />
 
       {isOverlayOpen && (
         <CanvasOverlay
