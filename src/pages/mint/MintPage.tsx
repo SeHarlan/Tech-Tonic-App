@@ -52,6 +52,7 @@ export function MintPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('sol');
   const [priceSol, setPriceSol] = useState(MINT_PRICE_SOL);
   const [priceSkr, setPriceSkr] = useState(MINT_PRICE_SKR);
+  const [mintCount, setMintCount] = useState<{ minted: number; total: number } | null>(null);
 
   // Capture owned IDs before minting starts
   const prevOwnedIdsRef = useRef<Set<string>>(new Set());
@@ -73,6 +74,11 @@ export function MintPage() {
         const guard = await fetchCandyGuard(umi, cm.mintAuthority);
 
         if (cancelled) return;
+
+        setMintCount({
+          minted: Number(cm.itemsRedeemed),
+          total: Number(cm.data.itemsAvailable),
+        });
 
         const publicGroup = guard.groups.find((g) => g.label === 'public');
         if (publicGroup) {
@@ -262,6 +268,13 @@ export function MintPage() {
             <p className="mint-subheader text-center text-[10px] text-[rgba(0,255,128,0.4)] font-mono">
               Season One // Limit 3 Per Wallet
             </p>
+
+            {/* Mint count */}
+            {mintCount && (
+              <p className="font-mono text-xs text-[rgba(0,255,128,0.5)] tracking-[0.2em] -mt-4">
+                {mintCount.minted} / {mintCount.total} minted
+              </p>
+            )}
 
             {/* Description */}
             <p className="text-center text-sm text-[rgba(0,255,128,0.55)] font-mono max-w-xs leading-relaxed -mt-2">

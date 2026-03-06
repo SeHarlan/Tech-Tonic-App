@@ -125,20 +125,37 @@ export async function loadStateIntoTextures(
     }
   }
 
+  // Flip image vertically for WebGL (readTextureToPNG saves as standard
+  // top-left-origin PNG, but WebGL textures use bottom-left origin).
+  const flipForGL = (img: HTMLImageElement): HTMLCanvasElement => {
+    const c = document.createElement('canvas');
+    c.width = expectedWidth;
+    c.height = expectedHeight;
+    const ctx = c.getContext('2d')!;
+    ctx.translate(0, c.height);
+    ctx.scale(1, -1);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  };
+
+  const flippedImage = flipForGL(imageImg);
+  const flippedMovement = flipForGL(movementImg);
+  const flippedPaint = flipForGL(paintImg);
+
   // Load image into BOTH ping-pong framebuffer textures.
   // The ping-pong alternates which texture is read each frame —
   // if only one is loaded, the other shows garbage every other cycle.
   for (const tex of targets.framebufferTextures) {
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageImg);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flippedImage);
   }
 
   // Movement and paint are single textures (no ping-pong)
   gl.bindTexture(gl.TEXTURE_2D, targets.movementTexture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, movementImg);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flippedMovement);
 
   gl.bindTexture(gl.TEXTURE_2D, targets.paintTexture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, paintImg);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, flippedPaint);
 
   gl.bindTexture(gl.TEXTURE_2D, null);
 }

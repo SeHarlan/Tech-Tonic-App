@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState, useRef, type PointerEvent as RPointerEvent } from 'react';
+import { useMemo, useCallback, useEffect, useState, useRef, type PointerEvent as RPointerEvent, type MouseEvent } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
 import { NftBrowser, loadNftIntoEngine, loadNftIntoEngineAsync, loadSketchSeed } from './NftBrowser';
-import { XIcon, CaretLineLeft, CaretLineRight } from '@phosphor-icons/react';
+import { XIcon, CaretLineLeft, CaretLineRight, FloppyDisk, ClockCounterClockwise } from '@phosphor-icons/react';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
 import {
@@ -17,6 +17,7 @@ import {
 } from '../../store/atoms';
 import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
+import { saveDraft, loadDraft, hasDraft } from '../../services/draft-storage';
 import './canvas-overlay.css';
 
 /** Resolve a persisted NFT ID to an index in a list, falling back to 0. */
@@ -59,6 +60,39 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
   const currentNft = browserItems.length > 0 ? browserItems[browseIndex] : null;
   const isBrowsing = activeTab !== 'sketch' && browserItems.length > 0;
+
+  // --- Draft save/load for owned NFTs ---
+  const [draftExists, setDraftExists] = useState(false);
+  const [draftBusy, setDraftBusy] = useState(false);
+
+  // Check if a draft exists whenever the active owned NFT changes
+  useEffect(() => {
+    if (activeTab !== 'owned' || !currentNft) { setDraftExists(false); return; }
+    hasDraft(currentNft.id).then(setDraftExists).catch(() => setDraftExists(false));
+  }, [activeTab, currentNft]);
+
+  const handleSaveDraft = useCallback(async (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!engine || !currentNft || draftBusy) return;
+    setDraftBusy(true);
+    try {
+      const state = await engine.serializeState();
+      await saveDraft(currentNft.id, state, currentNft.defaultWaterfallMode);
+      setDraftExists(true);
+    } catch (err) { console.error('Draft save failed:', err); }
+    setDraftBusy(false);
+  }, [engine, currentNft, draftBusy]);
+
+  const handleLoadDraft = useCallback(async (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!engine || !currentNft || draftBusy) return;
+    setDraftBusy(true);
+    try {
+      const draft = await loadDraft(currentNft.id);
+      if (draft) loadNftIntoEngine(engine, currentNft, draft);
+    } catch (err) { console.error('Draft load failed:', err); }
+    setDraftBusy(false);
+  }, [engine, currentNft, draftBusy]);
 
   // After a successful mint, load the newly minted NFT into the engine
   useEffect(() => {
@@ -317,6 +351,28 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
           {/* Separator */}
           <div className="canvas-overlay-separator" />
+
+          {/* Draft save/load — owned tab only */}
+          {activeTab === 'owned' && currentNft && (
+            <div className="flex flex-row items-center justify-center gap-3">
+              <MenuButton
+                onClick={handleSaveDraft}
+                disabled={draftBusy || !engine}
+                className="tracking-[0.12em] uppercase"
+              >
+                <FloppyDisk size={16} weight="bold" className="shrink-0" />
+                Save
+              </MenuButton>
+              <MenuButton
+                onClick={handleLoadDraft}
+                disabled={draftBusy || !engine || !draftExists}
+                className="tracking-[0.12em] uppercase"
+              >
+                <ClockCounterClockwise size={16} weight="bold" className="shrink-0" />
+                Load
+              </MenuButton>
+            </div>
+          )}
 
           {/* Buttons row */}
           <div className="flex flex-row items-center justify-center gap-4 mt-1">

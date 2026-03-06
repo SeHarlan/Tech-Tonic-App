@@ -103,7 +103,19 @@ export interface Engine {
 
   serializeState(): Promise<SerializedState>;
   loadState(state: EngineState): Promise<void>;
-  loadSession(seed: number, totalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean): Promise<void>;
+  loadSession(
+    seed: number,
+    totalFrameCount: number,
+    imageUrl: string,
+    defaultWaterfallMode?: boolean,
+    draftState?: {
+      imageBuffer: Blob;
+      movementBuffer: Blob;
+      paintBuffer: Blob;
+      totalFrameCount: number;
+      time: number;
+    } | null,
+  ): Promise<void>;
 
   getDrawingManager(): DrawingManager;
 
@@ -824,14 +836,34 @@ export function createEngine(config: EngineConfig): Engine {
       generateNoiseVolume();
     },
 
-    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean) {
+    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean, draftState?: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number; time: number } | null) {
       applySeed(newSeed);
+      // Always store NFT original — forceReset uses this, NOT the draft
       loadedSession = { imageUrl, totalFrameCount: newTotalFrameCount };
 
-      await loadImageIntoFramebuffers(imageUrl);
+      if (draftState) {
+        const toSrc = (buf: Blob) => URL.createObjectURL(buf);
+        const imgSrc = toSrc(draftState.imageBuffer);
+        const movSrc = toSrc(draftState.movementBuffer);
+        const paintSrc = toSrc(draftState.paintBuffer);
 
-      totalFrameCount = newTotalFrameCount;
-      time = totalFrameCount / targetFps;
+        await loadStateIntoTextures(gl, canvas.width, canvas.height,
+          { imageBufferSrc: imgSrc, movementBufferSrc: movSrc, paintBufferSrc: paintSrc },
+          { framebufferTextures: ppTextures, movementTexture: drawing.getMovementTexture(), paintTexture: drawing.getPaintTexture() },
+        );
+
+        URL.revokeObjectURL(imgSrc);
+        URL.revokeObjectURL(movSrc);
+        URL.revokeObjectURL(paintSrc);
+
+        totalFrameCount = draftState.totalFrameCount;
+        time = draftState.time;
+      } else {
+        await loadImageIntoFramebuffers(imageUrl);
+        totalFrameCount = newTotalFrameCount;
+        time = totalFrameCount / targetFps;
+      }
+
       waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
       isPointerDown = false;
     },

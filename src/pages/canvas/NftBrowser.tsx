@@ -2,6 +2,7 @@ import { useRef, useCallback } from 'react';
 import { CaretDoubleLeft, CaretDoubleRight } from '@phosphor-icons/react';
 import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
+import type { DraftData } from '../../services/draft-storage';
 
 interface NftBrowserProps {
   count: number;
@@ -25,13 +26,21 @@ function renderThenFreeze(engine: Engine) {
   requestAnimationFrame(wait);
 }
 
-export function loadNftIntoEngine(engine: Engine, nft: NftItem) {
-  loadNftIntoEngineAsync(engine, nft)
+export function loadNftIntoEngine(engine: Engine, nft: NftItem, draft?: DraftData | null) {
+  loadNftIntoEngineAsync(engine, nft, draft)
     .catch((err) => console.error('Failed to load NFT into engine:', err));
 }
 
-export async function loadNftIntoEngineAsync(engine: Engine, nft: NftItem) {
-  await engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode);
+export async function loadNftIntoEngineAsync(engine: Engine, nft: NftItem, draft?: DraftData | null) {
+  const draftState = draft ? {
+    imageBuffer: draft.imageBlob,
+    movementBuffer: draft.movementBlob,
+    paintBuffer: draft.paintBlob,
+    totalFrameCount: draft.meta.totalFrameCount,
+    time: draft.meta.time,
+  } : undefined;
+
+  await engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode, draftState);
   renderThenFreeze(engine);
 }
 
