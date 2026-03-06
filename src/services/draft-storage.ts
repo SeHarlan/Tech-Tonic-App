@@ -112,6 +112,12 @@ export async function saveDraft(
 }
 
 export async function loadDraft(nftId: string): Promise<DraftData | null> {
+  const exists = await hasDraft(nftId);
+  if (!exists) {
+    console.log(`[draft] No draft found for nftId: ${nftId}`);
+    return null;
+  }
+
   const dir = draftDir(nftId);
 
   try {

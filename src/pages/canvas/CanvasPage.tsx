@@ -5,7 +5,7 @@ import { cn } from '../../utils/ui-helpers';
 import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
 import { CanvasOverlay, type SlidePhase } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
-import { sketchSeedAtom, pendingMintLoadAtom } from '../../store/atoms';
+import { sketchSeedAtom, pendingMintLoadAtom, overlayTabAtom } from '../../store/atoms';
 import './canvas-overlay.css';
 
 const SLIDE_DURATION_MS = 350;
@@ -31,7 +31,10 @@ export function CanvasPage() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const seed = useAtomValue(sketchSeedAtom);
   const pendingMintLoad = useAtomValue(pendingMintLoadAtom);
+  const currentTab = useAtomValue(overlayTabAtom);
   const { isOverlayOpen, openOverlay, closeOverlay } = useOverlay();
+  const isInitialRender = useRef(true);
+  const needsInitialLoad = useRef(true);
 
   const [canvasBottom, setCanvasBottom] = useState(0);
 
@@ -62,16 +65,24 @@ export function CanvasPage() {
     engineRef.current = eng;
     setEngine(eng);
     eng.start();
-    // Default to sketch overlay unless arriving from a successful mint
-    if (!pendingMintLoad) openOverlay('sketch');
+    needsInitialLoad.current = true;
+    // Restore persisted tab — use 'owned' when returning from a successful mint
+    openOverlay(pendingMintLoad ? 'owned' : currentTab);
     computeCanvasBottom();
 
-    // Let a few frames render so the canvas isn't blank, then freeze
+    // Let a few frames render so the canvas isn't blank, then freeze.
+    // We count to 5 then freeze on the NEXT rAF to guarantee the engine's
+    // render loop has painted the final frame before we halt it.
+    isInitialRender.current = true;
     let frames = 0;
     const waitForContent = () => {
       frames++;
-      if (frames >= 3) {
-        eng.setGlobalFreeze(true);
+      if (frames >= 5) {
+        // Freeze one frame later so the engine's rAF callback runs first
+        requestAnimationFrame(() => {
+          eng.setGlobalFreeze(true);
+          isInitialRender.current = false;
+        });
       } else {
         requestAnimationFrame(waitForContent);
       }
@@ -89,6 +100,8 @@ export function CanvasPage() {
   // Sync engine freeze when overlay reopens (covers return from /mint)
   useEffect(() => {
     if (!engine || !isOverlayOpen) return;
+    // Skip during initial 3-frame warmup — waitForContent handles freeze
+    if (isInitialRender.current) return;
     engine.setGlobalFreeze(true);
     computeCanvasBottom();
   }, [engine, isOverlayOpen, computeCanvasBottom]);
@@ -192,6 +205,7 @@ export function CanvasPage() {
           onClose={handleOverlayClose}
           showTouchPrompt
           onTransitionChange={handleTransitionChange}
+          needsInitialLoad={needsInitialLoad}
         />
       )}
     </div>

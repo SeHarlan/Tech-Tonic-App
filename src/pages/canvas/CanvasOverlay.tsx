@@ -38,9 +38,10 @@ interface CanvasOverlayProps {
   onClose: () => void;
   showTouchPrompt?: boolean;
   onTransitionChange?: (state: { src: string | null; phase: SlidePhase; dir: 1 | -1 }) => void;
+  needsInitialLoad?: React.RefObject<boolean>;
 }
 
-export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt, onTransitionChange }: CanvasOverlayProps) {
+export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt, onTransitionChange, needsInitialLoad }: CanvasOverlayProps) {
   const navigate = useNavigate();
   const { overlayTab, setOverlayTab, hasOwned } = useOverlayWithNfts();
   const { ownedNfts, discoverNfts } = useNftStore();
@@ -100,6 +101,22 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     setPendingMintLoad(false);
     loadNftIntoEngine(engine, currentNft);
   }, [pendingMintLoad, engine, currentNft, setPendingMintLoad]);
+
+  // On first overlay open after engine creation: load the correct content for
+  // the persisted tab (owned/discover). Sketch is skipped — engine already has
+  // the seed from createEngine, and calling setSeed would clear the framebuffers.
+  // Uses a ref from CanvasPage so it only fires once per engine lifecycle,
+  // not every time the overlay re-opens.
+  useEffect(() => {
+    if (!needsInitialLoad?.current || pendingMintLoad || !engine) return;
+    needsInitialLoad.current = false;
+    if (activeTab === 'sketch') return;
+    const tabItems = activeTab === 'owned' ? ownedNfts : discoverNfts;
+    const tabId = activeTab === 'owned' ? activeOwnedId : activeDiscoverId;
+    const idx = indexFromId(tabItems, tabId);
+    const nft = tabItems[idx];
+    if (nft) loadNftIntoEngine(engine, nft);
+  }, [activeTab, engine, pendingMintLoad, needsInitialLoad, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
 
   const controlBottom = useMemo(() => {
     const midpoint = _canvasBottom + (window.innerHeight - _canvasBottom) / 2;

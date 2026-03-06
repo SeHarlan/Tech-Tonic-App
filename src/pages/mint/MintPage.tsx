@@ -270,11 +270,11 @@ export function MintPage() {
             </p>
 
             {/* Mint count */}
-            {mintCount && (
-              <p className="font-mono text-xs text-[rgba(0,255,128,0.5)] tracking-[0.2em] -mt-4">
-                {mintCount.minted} / {mintCount.total} minted
-              </p>
-            )}
+            
+            <p className="font-mono text-xs text-[rgba(0,255,128,0.5)] tracking-[0.2em] -mt-4">
+              {mintCount ? (<span>{mintCount.minted} / {mintCount.total} minted</span>) : (<span>Loading...</span>)}
+            </p>
+            
 
             {/* Description */}
             <p className="text-center text-sm text-[rgba(0,255,128,0.55)] font-mono max-w-xs leading-relaxed -mt-2">
