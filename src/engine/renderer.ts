@@ -462,6 +462,9 @@ export function createEngine(config: EngineConfig): Engine {
 
   /** Load an image URL into the ping-pong textures (flipped for WebGL) and clear drawing textures. */
   function loadImageIntoFramebuffers(imageUrl: string): Promise<void> {
+    if (!imageUrl) {
+      return Promise.reject(new Error('Cannot load image: URL is empty'));
+    }
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -837,10 +840,8 @@ export function createEngine(config: EngineConfig): Engine {
     },
 
     async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean, draftState?: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number; time: number } | null) {
-      applySeed(newSeed);
-      // Always store NFT original — forceReset uses this, NOT the draft
-      loadedSession = { imageUrl, totalFrameCount: newTotalFrameCount };
-
+      // Load the image/draft BEFORE mutating engine state so a failure
+      // (e.g. missing thumbnail) doesn't leave the engine half-updated.
       if (draftState) {
         const toSrc = (buf: Blob) => URL.createObjectURL(buf);
         const imgSrc = toSrc(draftState.imageBuffer);
@@ -855,11 +856,18 @@ export function createEngine(config: EngineConfig): Engine {
         URL.revokeObjectURL(imgSrc);
         URL.revokeObjectURL(movSrc);
         URL.revokeObjectURL(paintSrc);
+      } else {
+        await loadImageIntoFramebuffers(imageUrl);
+      }
 
+      // Image loaded successfully — now commit all state changes.
+      applySeed(newSeed);
+      loadedSession = { imageUrl, totalFrameCount: newTotalFrameCount };
+
+      if (draftState) {
         totalFrameCount = draftState.totalFrameCount;
         time = draftState.time;
       } else {
-        await loadImageIntoFramebuffers(imageUrl);
         totalFrameCount = newTotalFrameCount;
         time = totalFrameCount / targetFps;
       }

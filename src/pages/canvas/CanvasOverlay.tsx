@@ -52,7 +52,11 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
   const activeTab = overlayTab;
 
-  const browserItems = activeTab === 'owned' ? ownedNfts : activeTab === 'discover' ? discoverNfts : [];
+  // Filter out NFTs without thumbnails — they can't be loaded into the engine
+  const browserItems = useMemo(() => {
+    const items = activeTab === 'owned' ? ownedNfts : activeTab === 'discover' ? discoverNfts : [];
+    return items.filter((n) => n.thumbnailUrl);
+  }, [activeTab, ownedNfts, discoverNfts]);
   const browseIndex = activeTab === 'owned'
     ? indexFromId(ownedNfts, activeOwnedId)
     : activeTab === 'discover'
@@ -111,7 +115,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     if (!needsInitialLoad?.current || pendingMintLoad || !engine) return;
     needsInitialLoad.current = false;
     if (activeTab === 'sketch') return;
-    const tabItems = activeTab === 'owned' ? ownedNfts : discoverNfts;
+    const tabItems = (activeTab === 'owned' ? ownedNfts : discoverNfts).filter((n) => n.thumbnailUrl);
     const tabId = activeTab === 'owned' ? activeOwnedId : activeDiscoverId;
     const idx = indexFromId(tabItems, tabId);
     const nft = tabItems[idx];
@@ -166,7 +170,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
       loadSketchSeed(engine, sketchSeed);
       return;
     }
-    const tabItems = tab === 'owned' ? ownedNfts : discoverNfts;
+    const tabItems = (tab === 'owned' ? ownedNfts : discoverNfts).filter((n) => n.thumbnailUrl);
     const tabId = tab === 'owned' ? activeOwnedId : activeDiscoverId;
     const idx = indexFromId(tabItems, tabId);
     const nft = tabItems[idx];
@@ -227,8 +231,12 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     setSlideDir(dir);
     setSlidePhase('loading');
 
-    // 2-3. Load next NFT into engine (canvas hidden behind screenshot)
-    await loadNftIntoEngineAsync(engine, nft);
+    try {
+      // 2-3. Load next NFT into engine (canvas hidden behind screenshot)
+      await loadNftIntoEngineAsync(engine, nft);
+    } catch (err) {
+      console.warn('[Carousel] Failed to load NFT, skipping transition:', err);
+    }
 
     // 4-5. Trigger slide animation
     setSlidePhase('sliding');

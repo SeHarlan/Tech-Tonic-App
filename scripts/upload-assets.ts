@@ -135,12 +135,21 @@ async function main() {
       `[${i + 1}/${metadata.thumbnails.length}] Uploading ${entry.filename}...`,
     );
 
-    // Upload image to Arweave via Irys
+    // Upload image to Arweave via Irys (retry once on failure)
     const imageBuffer = await readFile(join(args.input, entry.filename));
     const imageFile = createGenericFile(imageBuffer, entry.filename, {
       contentType: 'image/png',
     });
-    const [imageUri] = await umi.uploader.upload([imageFile]);
+
+    let imageUri: string | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const [uri] = await umi.uploader.upload([imageFile]);
+      if (uri) { imageUri = uri; break; }
+      console.warn(`  Image upload returned empty (attempt ${attempt + 1}/2), retrying...`);
+    }
+    if (!imageUri) {
+      throw new Error(`Image upload failed for ${entry.filename} — aborting to prevent broken metadata.`);
+    }
     console.log(`  Image:    ${imageUri}`);
 
     // Create and upload Metaplex-standard metadata JSON
@@ -157,6 +166,9 @@ async function main() {
     };
 
     const metadataUri = await umi.uploader.uploadJson(nftMetadata);
+    if (!metadataUri) {
+      throw new Error(`Metadata upload failed for ${nftName} — aborting.`);
+    }
     console.log(`  Metadata: ${metadataUri}\n`);
 
     configLines.push({ name: nftName, uri: metadataUri });
