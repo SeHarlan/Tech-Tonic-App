@@ -348,12 +348,14 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   }
 
   // ---- Action bar: SYSTEM button ----
-  function handleSystemClick(e: PointerEvent) {
+  // Use 'click' (not pointerdown) so the full tap completes before
+  // the overlay opens — prevents mobile ghost-event glitches.
+  function handleSystemClick(e: MouseEvent) {
     e.stopPropagation();
     dispatch('openAppMenu');
   }
   if (systemBtn) {
-    systemBtn.addEventListener('pointerdown', handleSystemClick);
+    systemBtn.addEventListener('click', handleSystemClick);
   }
 
   // ---- Action bar: TOOLS button ----
@@ -585,7 +587,7 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
         brushDisplay.removeEventListener('mousedown', startBrushDrag as EventListener);
         brushDisplay.removeEventListener('touchstart', startBrushDrag as EventListener);
       }
-      if (systemBtn) systemBtn.removeEventListener('pointerdown', handleSystemClick);
+      if (systemBtn) systemBtn.removeEventListener('click', handleSystemClick);
       if (toolsBtn) toolsBtn.removeEventListener('pointerdown', handleToolsClick);
     },
   };
