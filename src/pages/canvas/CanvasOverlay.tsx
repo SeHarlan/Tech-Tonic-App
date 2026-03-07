@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useEffect, useState, useRef, type PointerEvent as RPointerEvent } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom } from 'jotai';
 import { useAccount } from '@solana/connector';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
 import { NftBrowser, loadNftIntoEngine, loadNftIntoEngineAsync, loadSketchSeed } from './NftBrowser';
-import { XIcon, CaretLineLeft, CaretLineRight, FloppyDiskIcon } from '@phosphor-icons/react';
+import { XIcon, CaretLineLeft, CaretLineRight, FloppyDiskIcon, ShuffleIcon } from '@phosphor-icons/react';
 import { SaveDialog } from './SaveDialog';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
@@ -56,7 +56,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
   const refreshOwned = useRefreshOwned();
   const [activeOwnedId, setActiveOwnedId] = useAtom(activeOwnedNftIdAtom);
   const [activeDiscoverId, setActiveDiscoverId] = useAtom(activeDiscoverNftIdAtom);
-  const sketchSeed = useAtomValue(sketchSeedAtom);
+  const [sketchSeed, setSketchSeed] = useAtom(sketchSeedAtom);
   const [pendingMintLoad, setPendingMintLoad] = useAtom(pendingMintLoadAtom);
 
   const activeTab = overlayTab;
@@ -456,6 +456,19 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
           {/* Buttons row */}
           <div className="flex flex-row items-center justify-center gap-4 mt-1">
+            {activeTab === 'sketch' && (
+              <MenuButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const newSeed = Math.floor(Math.random() * 1000);
+                  setSketchSeed(newSeed);
+                  if (engine) loadSketchSeed(engine, newSeed);
+                }}
+                className="size-9.25"
+              >
+                <ShuffleIcon size={18} weight="bold" className="shrink-0" />
+              </MenuButton>
+            )}
             {activeTab === 'owned' && currentNft && (
               <MenuButton
                 onClick={(e) => { e.stopPropagation(); setSaveDialogOpen(true); }}

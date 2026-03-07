@@ -111,9 +111,6 @@ function dispatchToEngine(
         engine.startRecording();
       }
       break;
-    case 'newSeed':
-      engine.setSeed(Math.floor(Math.random() * 1000));
-      break;
   }
 }
 

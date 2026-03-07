@@ -110,11 +110,23 @@ const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function 
     };
   }, [canvasRef, hidden, updatePosition, hide]);
 
+  const autoHideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   const refresh = useCallback(() => {
     if (visible.current && lastPos.current) {
       updatePosition(lastPos.current.x, lastPos.current.y);
+    } else {
+      // No cursor on canvas — show centered on canvas with auto-hide
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      updatePosition(cx, cy);
+      clearTimeout(autoHideTimer.current);
+      autoHideTimer.current = setTimeout(hide, 800);
     }
-  }, [updatePosition]);
+  }, [updatePosition, canvasRef, hide]);
 
   useImperativeHandle(ref, () => ({ refresh }), [refresh]);
 
