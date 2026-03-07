@@ -277,7 +277,7 @@ export function CanvasPage() {
   }
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-[44px] bg-black flex items-center justify-center">
+    <div className="fixed inset-x-0 top-0 bottom-[44px]  flex items-center justify-center">
       {/* Carousel transition screenshot — slides out as old content */}
       {transitionSrc && (
         <img

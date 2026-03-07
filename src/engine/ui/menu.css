@@ -73,6 +73,8 @@
 .action-bar-tools {
     border-top: none;
     border-bottom: none;
+    border-left-color: rgba(0, 255, 128, 0.25);
+    border-right-color: rgba(0, 255, 128, 0.25);
 }
 
 

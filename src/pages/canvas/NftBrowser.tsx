@@ -32,15 +32,33 @@ export function loadNftIntoEngine(engine: Engine, nft: NftItem, draft?: DraftDat
 }
 
 export async function loadNftIntoEngineAsync(engine: Engine, nft: NftItem, draft?: DraftData | null) {
-  const draftState = draft ? {
-    imageBuffer: draft.imageBlob,
-    movementBuffer: draft.movementBlob,
-    paintBuffer: draft.paintBlob,
-    totalFrameCount: draft.meta.totalFrameCount,
-    time: draft.meta.time,
-  } : undefined;
+  // Priority: local draft > on-chain buffers > default thumbnail
+  let draftState: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number } | undefined;
+  let manualMode = nft.manualMode;
 
-  const manualMode = draft ? (draft.meta.manualMode ?? false) : nft.manualMode;
+  if (draft) {
+    draftState = {
+      imageBuffer: draft.imageBlob,
+      movementBuffer: draft.movementBlob,
+      paintBuffer: draft.paintBlob,
+      totalFrameCount: draft.meta.totalFrameCount,
+    };
+    manualMode = draft.meta.manualMode ?? false;
+  } else if (nft.iterations > 0 && nft.movementBufferUrl && nft.paintBufferUrl) {
+    // Load on-chain buffers for previously updated NFTs
+    const [imageBlob, movementBlob, paintBlob] = await Promise.all([
+      fetch(nft.thumbnailUrl).then((r) => r.blob()),
+      fetch(nft.movementBufferUrl!).then((r) => r.blob()),
+      fetch(nft.paintBufferUrl!).then((r) => r.blob()),
+    ]);
+    draftState = {
+      imageBuffer: imageBlob,
+      movementBuffer: movementBlob,
+      paintBuffer: paintBlob,
+      totalFrameCount: nft.frameCount,
+    };
+  }
+
   await engine.loadSession(nft.seed, nft.frameCount, nft.thumbnailUrl, nft.defaultWaterfallMode, manualMode, draftState);
   renderThenFreeze(engine);
 }

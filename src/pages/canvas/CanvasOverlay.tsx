@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useEffect, useState, useRef, type PointerEvent as RPointerEvent } from 'react';
 import { useAtom, useAtomValue } from 'jotai';
+import { useAccount } from '@solana/connector';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { WalletButton } from '../../components/ui/WalletButton';
 import { useNavigate } from 'react-router';
@@ -10,6 +11,8 @@ import { XIcon, CaretLineLeft, CaretLineRight, FloppyDiskIcon } from '@phosphor-
 import { SaveDialog } from './SaveDialog';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
+import { useUmi } from '../../hooks/useUmi';
+import { useRefreshOwned } from '../../hooks/useRefreshOwned';
 import {
   activeOwnedNftIdAtom,
   activeDiscoverNftIdAtom,
@@ -19,6 +22,8 @@ import {
 import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
 import { saveDraft, loadDraft, hasDraft } from '../../services/draft-storage';
+import { UPDATE_API_URL } from '../../../config/env';
+import { base58 } from '@metaplex-foundation/umi/serializers';
 import './canvas-overlay.css';
 
 /** Resolve a persisted NFT ID to an index in a list, falling back to 0. */
@@ -46,6 +51,9 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
   const navigate = useNavigate();
   const { overlayTab, setOverlayTab, hasOwned } = useOverlayWithNfts();
   const { ownedNfts, discoverNfts } = useNftStore();
+  const { address } = useAccount();
+  const umi = useUmi();
+  const refreshOwned = useRefreshOwned();
   const [activeOwnedId, setActiveOwnedId] = useAtom(activeOwnedNftIdAtom);
   const [activeDiscoverId, setActiveDiscoverId] = useAtom(activeDiscoverNftIdAtom);
   const sketchSeed = useAtomValue(sketchSeedAtom);
@@ -98,6 +106,67 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     } catch (err) { console.error('Draft load failed:', err); }
     setDraftBusy(false);
   }, [engine, currentNft, draftBusy]);
+
+  // --- On-chain update ---
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+
+  const canUpdate = !!(
+    address &&
+    currentNft &&
+    currentNft.owner === address &&
+    UPDATE_API_URL
+  );
+
+  const handleUpdate = useCallback(async () => {
+    if (!engine || !currentNft || !address || !UPDATE_API_URL) return;
+    setUpdateBusy(true);
+    setUpdateError(null);
+
+    try {
+      // 1. Save draft as safety net
+      const state = await engine.serializeState();
+      await saveDraft(currentNft.id, state, currentNft.defaultWaterfallMode, engine.isManualMode());
+      setDraftExists(true);
+
+      // 2. Sign confirmation message
+      const message = `Confirm permanent update of ${currentNft.name} (asset: ${currentNft.id})`;
+      const messageBytes = new TextEncoder().encode(message);
+      const signatureBytes = await umi.identity.signMessage(messageBytes);
+      const signature = base58.deserialize(signatureBytes)[0];
+
+      // 3. POST to backend
+      const formData = new FormData();
+      formData.append('image', state.imageBuffer, 'image.png');
+      formData.append('movement', state.movementBuffer, 'movement.png');
+      formData.append('paint', state.paintBuffer, 'paint.png');
+      formData.append('assetId', currentNft.id);
+      formData.append('walletAddress', address);
+      formData.append('signature', signature);
+      formData.append('message', message);
+
+      const res = await fetch(`${UPDATE_API_URL}/api/update-nft`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(body.error || `Update failed (${res.status})`);
+      }
+
+      // 4. Refresh owned NFTs to pick up new metadata
+      await refreshOwned();
+
+      // 5. Close dialog on success
+      setSaveDialogOpen(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Update failed';
+      setUpdateError(msg);
+    } finally {
+      setUpdateBusy(false);
+    }
+  }, [engine, currentNft, address, umi, refreshOwned]);
 
   // After a successful mint, load the newly minted NFT into the engine
   useEffect(() => {
@@ -404,9 +473,13 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
         onClose={() => setSaveDialogOpen(false)}
         onSaveDraft={handleSaveDraft}
         onLoadDraft={handleLoadDraft}
+        onUpdate={handleUpdate}
         draftBusy={draftBusy}
         draftExists={draftExists}
         engineReady={!!engine}
+        canUpdate={canUpdate}
+        updateBusy={updateBusy}
+        updateError={updateError}
       />
     </div>
   );

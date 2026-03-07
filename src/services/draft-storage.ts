@@ -8,7 +8,6 @@ export interface DraftMeta {
   draftKey: string;
   nftId: string;
   seed: number;
-  time: number;
   totalFrameCount: number;
   params: ShaderParams;
   defaultWaterfallMode: boolean;
@@ -70,7 +69,6 @@ export async function saveDraft(
     draftKey: getDraftKey(nftId),
     nftId,
     seed: state.seed,
-    time: state.time,
     totalFrameCount: state.totalFrameCount,
     params: state.params,
     defaultWaterfallMode,

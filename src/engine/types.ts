@@ -12,7 +12,6 @@ export interface EngineConfig {
 
 export interface EngineState {
   seed: number;
-  time: number;
   totalFrameCount: number;
   params: ShaderParams;
   imageBuffer: Blob | HTMLImageElement;

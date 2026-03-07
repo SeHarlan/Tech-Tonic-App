@@ -81,3 +81,7 @@ export const COLLECTION_ADDRESS = DEMO_MODE
 // When the Seeker Only phase begins (admin premint happens 24h before, off-timeline).
 export const MINT_START_TIME =
   import.meta.env.VITE_MINT_START_TIME || undefined;
+
+// Backend URL for NFT on-chain updates (Hono + Bun on Railway)
+export const UPDATE_API_URL =
+  import.meta.env.VITE_UPDATE_API_URL || '';

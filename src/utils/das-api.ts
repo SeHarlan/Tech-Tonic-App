@@ -8,18 +8,23 @@ export interface NftAttribute {
 export interface NftItem {
   id: string;
   name: string;
+  owner: string;
   seed: number;
   frameCount: number;
   defaultWaterfallMode: boolean;
   manualMode: boolean;
   iterations: number;
   thumbnailUrl: string;
+  jsonUri: string;
+  movementBufferUrl?: string;
+  paintBufferUrl?: string;
   attributes: NftAttribute[];
 }
 
 interface DasAsset {
   id: string;
   content: {
+    json_uri: string;
     metadata: {
       name: string;
       attributes?: Array<{ trait_type: string; value: string }>;
@@ -27,6 +32,7 @@ interface DasAsset {
     links?: { image?: string };
     files?: Array<{ uri: string; cdn_uri?: string; mime: string }>;
   };
+  ownership: { owner: string };
   grouping?: Array<{ group_key: string; group_value: string }>;
 }
 
@@ -34,7 +40,7 @@ function assetToNftItem(asset: DasAsset): NftItem {
   const attrs = asset.content.metadata.attributes ?? [];
   const seedAttr = attrs.find((a) => a.trait_type === 'Seed');
   const seed = seedAttr ? Number(seedAttr.value) : 0;
-  const frameCountAttr = attrs.find((a) => a.trait_type === 'Frame Count');
+  const frameCountAttr = attrs.find((a) => a.trait_type === 'Engine Frame');
   const frameCount = frameCountAttr ? Number(frameCountAttr.value) : 33 * 60;
   const waterfallAttr = attrs.find((a) => a.trait_type === 'Waterfall');
   const defaultWaterfallMode = waterfallAttr ? waterfallAttr.value === 'On' : false;
@@ -49,27 +55,40 @@ function assetToNftItem(asset: DasAsset): NftItem {
   //  1. content.links.image — canonical image URL from metadata JSON (Arweave/Irys gateway)
   //  2. files[].uri — raw gateway URL
   //  3. files[].cdn_uri — Helius CDN proxy (fallback; won't work for WebGL cross-origin)
-  const imageFile = asset.content.files?.find((f) => f.mime.startsWith('image/'));
+  const imageFile = asset.content.files?.find((f) => f.mime === 'image/png');
 
   //TODO create a better fallback system, with cdn tried first and fallback to links/image if cdn url fails
   let imageUrl =
     asset.content.links?.image ?? imageFile?.uri ?? imageFile?.cdn_uri ?? '';
 
+  // Buffer files for updated NFTs (custom MIME types)
+  const movementFile = asset.content.files?.find((f) => f.mime === 'image/techtonic-movement');
+  const paintFile = asset.content.files?.find((f) => f.mime === 'image/techtonic-paint');
+  let movementBufferUrl = movementFile?.uri ?? movementFile?.cdn_uri;
+  let paintBufferUrl = paintFile?.uri ?? paintFile?.cdn_uri;
+
   // Devnet assets are uploaded to the devnet Irys node but metadata references
   // the mainnet gateway. Rewrite to the devnet gateway in demo mode.
-  if (DEMO_MODE && imageUrl.includes('gateway.irys.xyz')) {
-    imageUrl = imageUrl.replace('gateway.irys.xyz', 'devnet.irys.xyz');
-  }
+  const rewriteDevnet = (url: string) =>
+    DEMO_MODE ? url.replace('gateway.irys.xyz', 'devnet.irys.xyz') : url;
+
+  imageUrl = rewriteDevnet(imageUrl);
+  if (movementBufferUrl) movementBufferUrl = rewriteDevnet(movementBufferUrl);
+  if (paintBufferUrl) paintBufferUrl = rewriteDevnet(paintBufferUrl);
 
   return {
     id: asset.id,
     name: asset.content.metadata.name,
+    owner: asset.ownership.owner,
     seed,
     frameCount,
     defaultWaterfallMode,
     manualMode,
     iterations,
     thumbnailUrl: imageUrl,
+    jsonUri: asset.content.json_uri,
+    movementBufferUrl,
+    paintBufferUrl,
     attributes: attrs,
   };
 }

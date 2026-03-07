@@ -114,7 +114,6 @@ export interface Engine {
       movementBuffer: Blob;
       paintBuffer: Blob;
       totalFrameCount: number;
-      time: number;
     } | null,
   ): Promise<void>;
 
@@ -801,15 +800,15 @@ export function createEngine(config: EngineConfig): Engine {
         ppTextures[currentFbIndex],
         drawing.getMovementTexture(),
         drawing.getPaintTexture(),
-        time, totalFrameCount, seed, params,
+        totalFrameCount, seed, params,
       );
     },
 
     async loadState(state) {
       seed = normalizeSeed(state.seed);
       params = state.params;
-      time = state.time;
       totalFrameCount = state.totalFrameCount;
+      time = totalFrameCount / targetFps;
 
       // Convert Blobs to object URLs for image loading
       const toSrc = (buf: Blob | HTMLImageElement) =>
@@ -840,7 +839,7 @@ export function createEngine(config: EngineConfig): Engine {
       generateNoiseVolume();
     },
 
-    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean, manualMode?: boolean, draftState?: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number; time: number } | null) {
+    async loadSession(newSeed: number, newTotalFrameCount: number, imageUrl: string, defaultWaterfallMode?: boolean, manualMode?: boolean, draftState?: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number } | null) {
       // Load the image/draft BEFORE mutating engine state so a failure
       // (e.g. missing thumbnail) doesn't leave the engine half-updated.
       if (draftState) {
@@ -867,11 +866,10 @@ export function createEngine(config: EngineConfig): Engine {
 
       if (draftState) {
         totalFrameCount = draftState.totalFrameCount;
-        time = draftState.time;
       } else {
         totalFrameCount = newTotalFrameCount;
-        time = totalFrameCount / targetFps;
       }
+      time = totalFrameCount / targetFps;
 
       waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
       manualModeFlag = manualMode ?? false;

@@ -4,7 +4,6 @@ import type { ShaderParams } from './types';
 
 export interface SerializedState {
   seed: number;
-  time: number;
   totalFrameCount: number;
   params: ShaderParams;
   imageBuffer: Blob;     // PNG — main simulation framebuffer
@@ -62,7 +61,6 @@ export async function serializeState(
   framebufferTexture: WebGLTexture,
   movementTexture: WebGLTexture,
   paintTexture: WebGLTexture,
-  time: number,
   totalFrameCount: number,
   seed: number,
   params: ShaderParams,
@@ -71,7 +69,7 @@ export async function serializeState(
   const movementBuffer = await readTextureToPNG(gl, canvas, movementTexture);
   const paintBuffer = await readTextureToPNG(gl, canvas, paintTexture);
 
-  return { seed, time, totalFrameCount, params, imageBuffer, movementBuffer, paintBuffer };
+  return { seed, totalFrameCount, params, imageBuffer, movementBuffer, paintBuffer };
 }
 
 // --- Load state into textures ---

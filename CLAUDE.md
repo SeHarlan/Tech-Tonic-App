@@ -43,6 +43,13 @@ Use **Phosphor Icons** (`@phosphor-icons/react`) for all icons in React componen
 - Env vars must use `VITE_` prefix; centralized in `src/config/env.ts`
 - GLSL shaders imported as strings via `vite-plugin-glsl`
 
+## Monorepo Structure
+Two independent deployables with separate dependency trees:
+- **Frontend** (`src/`, root `package.json`) — React 19 + Vite → Vercel. Capacitor Android build also uses this.
+- **Backend** (`server/`, own `package.json`) — Bun + Hono API → Railway. See `server/CLAUDE.md` for backend-specific rules.
+
+Do not import across boundaries (`server/` ↔ `src/`). Do not install deps in the wrong `package.json`.
+
 ## Agent Directives
 - When a task has multiple viable approaches, present 2-3 solution options with brief pros/cons before implementing. For simple, obvious fixes, proceed directly.
 - Ask clarifying questions for user and wait for answers before starting work if the request is ambiguous or if a solution has meaningful tradeoffs.

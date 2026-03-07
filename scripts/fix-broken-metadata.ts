@@ -3,7 +3,7 @@
  *
  * Scans the collection for assets with missing image data, re-uploads
  * the thumbnail + metadata JSON to Irys, then updates the on-chain
- * asset URI via Metaplex Core's updateV1.
+ * asset URI via Metaplex Core's update().
  *
  * Usage:
  *   bun run scripts/fix-broken-metadata.ts [--keypair <path>] [--dry-run]
@@ -17,7 +17,7 @@ import {
   publicKey,
   some,
 } from '@metaplex-foundation/umi';
-import { mplCore, updateV1 } from '@metaplex-foundation/mpl-core';
+import { mplCore, update, fetchAsset } from '@metaplex-foundation/mpl-core';
 import { readFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
@@ -196,10 +196,11 @@ async function main() {
 
     // 3. Update on-chain asset URI
     console.log(`  Updating on-chain asset...`);
-    await updateV1(umi, {
-      asset: publicKey(asset.id),
+    const assetAccount = await fetchAsset(umi, publicKey(asset.id));
+    await update(umi, {
+      asset: assetAccount,
       collection: publicKey(COLLECTION_ADDRESS),
-      newUri: some(metadataUri),
+      uri: some(metadataUri),
     }).sendAndConfirm(umi, { confirm: { commitment: 'confirmed' } });
 
     console.log(`  Done!\n`);

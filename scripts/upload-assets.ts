@@ -162,6 +162,7 @@ async function main() {
       properties: {
         files: [{ uri: imageUri, type: 'image/png' }],
         category: 'image',
+        original_image: imageUri,
       },
     };
 

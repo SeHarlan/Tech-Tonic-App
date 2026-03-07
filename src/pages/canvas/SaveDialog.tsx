@@ -8,9 +8,13 @@ interface SaveDialogProps {
   onClose: () => void;
   onSaveDraft: () => void;
   onLoadDraft: () => void;
+  onUpdate: () => void;
   draftBusy: boolean;
   draftExists: boolean;
   engineReady: boolean;
+  canUpdate: boolean;
+  updateBusy: boolean;
+  updateError: string | null;
 }
 
 export function SaveDialog({
@@ -18,9 +22,13 @@ export function SaveDialog({
   onClose,
   onSaveDraft,
   onLoadDraft,
+  onUpdate,
   draftBusy,
   draftExists,
   engineReady,
+  canUpdate,
+  updateBusy,
+  updateError,
 }: SaveDialogProps) {
   if (!open) return null;
 
@@ -98,11 +106,12 @@ export function SaveDialog({
               </div>
               <div className="flex flex-col items-center gap-2">
                 <MenuButton
-                  disabled
+                  onClick={onUpdate}
+                  disabled={updateBusy || !engineReady || !canUpdate}
                   className="tracking-[0.12em] uppercase gap-2 w-full"
                 >
                   <ArrowsClockwiseIcon size={16} weight="bold" className="shrink-0" />
-                  Update
+                  {updateBusy ? 'Updating…' : 'Update'}
                 </MenuButton>
                 <p className="font-mono text-sm leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
                   Permanently change this artifact for everyone to see
@@ -110,6 +119,12 @@ export function SaveDialog({
               </div>
             </div>
           </div>
+
+          {updateError && (
+            <p className="font-mono text-xs tracking-[0.05em] text-red-400 m-0 text-center max-w-[260px]">
+              {updateError}
+            </p>
+          )}
 
           <MenuButton
             onClick={onClose}
