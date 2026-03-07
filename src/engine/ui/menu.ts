@@ -561,11 +561,13 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
 
     show() {
       if (actionBar) actionBar.classList.remove('bar-hidden');
+      menuContainer.classList.remove('menu-hidden');
     },
 
     hide() {
       closeMenu();
       if (actionBar) actionBar.classList.add('bar-hidden');
+      menuContainer.classList.add('menu-hidden');
     },
 
     updateActiveStates,
