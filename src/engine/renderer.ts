@@ -896,6 +896,7 @@ export function createEngine(config: EngineConfig): Engine {
     getDrawingManager() { return drawing; },
 
     handlePointerDown(canvasX: number, canvasY: number) {
+      if (globalFreezeFlag) return;
       isPointerDown = true;
       lastPointerX = canvasX;
       lastPointerY = canvasY;
@@ -908,7 +909,7 @@ export function createEngine(config: EngineConfig): Engine {
     },
 
     handlePointerMove(canvasX: number, canvasY: number) {
-      if (!isPointerDown) return;
+      if (!isPointerDown || globalFreezeFlag) return;
       drawing.drawLine(lastPointerX, lastPointerY, canvasX, canvasY, drawMode, direction, {
         waterfallVariant,
         eraseVariant,
