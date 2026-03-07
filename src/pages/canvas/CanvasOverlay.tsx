@@ -109,6 +109,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
   // --- On-chain update ---
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateResult, setUpdateResult] = useState<'success' | 'error' | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   const canUpdate = !!(
@@ -121,6 +122,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
   const handleUpdate = useCallback(async () => {
     if (!engine || !currentNft || !address || !UPDATE_API_URL) return;
     setUpdateBusy(true);
+    setUpdateResult(null);
     setUpdateError(null);
 
     try {
@@ -158,15 +160,21 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
       // 4. Refresh owned NFTs to pick up new metadata
       await refreshOwned();
 
-      // 5. Close dialog on success
-      setSaveDialogOpen(false);
+      // 5. Show success
+      setUpdateResult('success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Update failed';
+      setUpdateResult('error');
       setUpdateError(msg);
     } finally {
       setUpdateBusy(false);
     }
   }, [engine, currentNft, address, umi, refreshOwned]);
+
+  const handleReset = useCallback(() => {
+    if (!engine || !currentNft) return;
+    loadNftIntoEngine(engine, currentNft);
+  }, [engine, currentNft]);
 
   // After a successful mint, load the newly minted NFT into the engine
   useEffect(() => {
@@ -474,11 +482,13 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
         onSaveDraft={handleSaveDraft}
         onLoadDraft={handleLoadDraft}
         onUpdate={handleUpdate}
+        onReset={handleReset}
         draftBusy={draftBusy}
         draftExists={draftExists}
         engineReady={!!engine}
         canUpdate={canUpdate}
         updateBusy={updateBusy}
+        updateResult={updateResult}
         updateError={updateError}
       />
     </div>

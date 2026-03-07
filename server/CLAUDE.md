@@ -11,17 +11,16 @@ Bun + Hono API server for NFT metadata updates. Deployed to Railway.
 ## Environment Variables
 All loaded and validated in `src/config.ts` — throws at startup if missing.
 
-`DEMO_MODE` (`"true"` | `"false"`) switches between devnet and mainnet, mirroring the frontend pattern:
-- `DEMO_MODE=true` → devnet RPC, demo collection address, demo deployer keypair
-- `DEMO_MODE=false` → mainnet RPC, Season One collection address, Season One deployer keypair
+`DEMO_MODE` (`"true"` | `"false"`) switches collection address between devnet and mainnet.
+`DEMO_MODE` selects between devnet/mainnet for RPC and collection address.
+`DEPLOYER_KEYPAIR` is set per environment (dev vs prod Railway service).
 
 | Variable | Description |
 |---|---|
 | `DEMO_MODE` | `"true"` for devnet, `"false"` for mainnet |
-| `DEPLOYER_KEYPAIR` | Demo/devnet deployer secret key (JSON byte array) |
-| `SEASON_ONE_DEPLOYER_KEYPAIR` | Mainnet deployer secret key (JSON byte array) |
-| `RPC_ENDPOINT` | Helius devnet RPC URL |
-| `SEASON_ONE_RPC_ENDPOINT` | Helius mainnet RPC URL |
+| `DEPLOYER_KEYPAIR` | Deployer secret key — JSON byte array (set per environment) |
+| `DEVNET_RPC_ENDPOINT` | Helius devnet RPC URL |
+| `MAINNET_RPC_ENDPOINT` | Helius mainnet RPC URL |
 | `COLLECTION_ADDRESS` | Demo/devnet MPL Core collection public key |
 | `SEASON_ONE_COLLECTION_ADDRESS` | Mainnet MPL Core collection public key |
 | `ALLOWED_ORIGINS` | Comma-separated CORS origins |
@@ -31,7 +30,9 @@ All loaded and validated in `src/config.ts` — throws at startup if missing.
 server/src/
 ├── index.ts               # Hono app, CORS, health check, route mounting
 ├── config.ts              # Env var loading + validation
-├── lib/umi.ts             # UMI singleton (deployer keypair + Irys uploader)
+├── lib/
+│   ├── rpc.ts             # Shared JSON-RPC 2.0 helper for DAS/Helius calls
+│   └── umi.ts             # UMI singleton (deployer keypair + Irys uploader)
 ├── routes/update-nft.ts   # POST /api/update-nft handler
 ├── services/
 │   ├── irys-upload.ts     # Irys file upload with retry

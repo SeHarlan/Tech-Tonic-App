@@ -62,9 +62,9 @@ export const CLUSTER: SolanaCluster = DEMO_MODE
   ? 'devnet'
   : (import.meta.env.VITE_SOLANA_CLUSTER as SolanaCluster) || 'devnet';
 
-export const RPC_ENDPOINT =
-  import.meta.env.VITE_RPC_ENDPOINT ||
-  (CLUSTER === 'mainnet-beta' ? DEFAULT_RPC_MAINNET : DEFAULT_RPC_DEVNET);
+export const RPC_ENDPOINT = CLUSTER === 'mainnet-beta'
+  ? (import.meta.env.VITE_MAINNET_RPC_ENDPOINT || DEFAULT_RPC_MAINNET)
+  : (import.meta.env.VITE_DEVNET_RPC_ENDPOINT || DEFAULT_RPC_DEVNET);
 
 // Candy Machine addresses
 // Demo uses the generic devnet CM (no time guards).

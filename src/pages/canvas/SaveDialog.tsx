@@ -9,11 +9,13 @@ interface SaveDialogProps {
   onSaveDraft: () => void;
   onLoadDraft: () => void;
   onUpdate: () => void;
+  onReset: () => void;
   draftBusy: boolean;
   draftExists: boolean;
   engineReady: boolean;
   canUpdate: boolean;
   updateBusy: boolean;
+  updateResult: 'success' | 'error' | null;
   updateError: string | null;
 }
 
@@ -23,11 +25,13 @@ export function SaveDialog({
   onSaveDraft,
   onLoadDraft,
   onUpdate,
+  onReset,
   draftBusy,
   draftExists,
   engineReady,
   canUpdate,
   updateBusy,
+  updateResult,
   updateError,
 }: SaveDialogProps) {
   if (!open) return null;
@@ -94,7 +98,8 @@ export function SaveDialog({
             <div className="grid grid-cols-2 gap-4 w-full">
               <div className="flex flex-col items-center gap-2">
                 <MenuButton
-                  disabled
+                  onClick={onReset}
+                  disabled={updateBusy || !engineReady || !canUpdate}
                   className="tracking-[0.12em] uppercase gap-2 w-full"
                 >
                   <ArrowCounterClockwiseIcon size={16} weight="bold" className="shrink-0" />
@@ -110,7 +115,7 @@ export function SaveDialog({
                   disabled={updateBusy || !engineReady || !canUpdate}
                   className="tracking-[0.12em] uppercase gap-2 w-full"
                 >
-                  <ArrowsClockwiseIcon size={16} weight="bold" className="shrink-0" />
+                  <ArrowsClockwiseIcon size={16} weight="bold" className={cn("shrink-0", updateBusy && "animate-spin")} />
                   {updateBusy ? 'Updating…' : 'Update'}
                 </MenuButton>
                 <p className="font-mono text-sm leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
@@ -120,7 +125,12 @@ export function SaveDialog({
             </div>
           </div>
 
-          {updateError && (
+          {updateResult === 'success' && (
+            <p className="font-mono text-xs tracking-[0.05em] text-[rgb(0,255,128)] m-0 text-center">
+              Artifact updated successfully
+            </p>
+          )}
+          {updateResult === 'error' && updateError && (
             <p className="font-mono text-xs tracking-[0.05em] text-red-400 m-0 text-center max-w-[260px]">
               {updateError}
             </p>

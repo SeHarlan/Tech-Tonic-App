@@ -46,7 +46,7 @@ function assetToNftItem(asset: DasAsset): NftItem {
   const defaultWaterfallMode = waterfallAttr ? waterfallAttr.value === 'On' : false;
   const manualModeAttr = attrs.find((a) => a.trait_type === 'Manual Mode');
   const manualMode = manualModeAttr ? manualModeAttr.value === 'On' : false;
-  const iterationsAttr = attrs.find((a) => a.trait_type === 'Iterations');
+  const iterationsAttr = attrs.find((a) => a.trait_type === 'Iteration');
   const iterations = iterationsAttr ? Number(iterationsAttr.value) : 0;
 
   // Image URL priority — prefer raw gateway URLs for CORS compatibility (needed by
