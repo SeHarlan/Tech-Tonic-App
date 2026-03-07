@@ -1,17 +1,13 @@
 import { createPortal } from 'react-dom';
 import { MenuButton } from '../../components/ui/MenuButton';
 import { cn } from '../../utils/ui-helpers';
-import { FloppyDiskIcon, ClockCounterClockwiseIcon, ArrowsClockwiseIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import { FloppyDiskIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 
 interface SaveDialogProps {
   open: boolean;
   onClose: () => void;
-  onSaveDraft: () => void;
-  onLoadDraft: () => void;
   onUpdate: () => void;
   onReset: () => void;
-  draftBusy: boolean;
-  draftExists: boolean;
   engineReady: boolean;
   canUpdate: boolean;
   updateBusy: boolean;
@@ -22,12 +18,8 @@ interface SaveDialogProps {
 export function SaveDialog({
   open,
   onClose,
-  onSaveDraft,
-  onLoadDraft,
   onUpdate,
   onReset,
-  draftBusy,
-  draftExists,
   engineReady,
   canUpdate,
   updateBusy,
@@ -42,92 +34,49 @@ export function SaveDialog({
       onClick={onClose}
     >
       <div
-        className={cn('wallet-picker', 'relative max-h-[80vh] max-w-full min-w-[280px] overflow-x-hidden overflow-y-auto')}
+        className={cn('wallet-picker', 'relative max-h-[80vh] w-[280px] max-w-full overflow-x-hidden overflow-y-auto')}
         onClick={(e) => e.stopPropagation()}
       >
         <span className={cn('wallet-picker-scanlines', 'absolute inset-0 overflow-hidden pointer-events-none z-2')} />
 
         <div className="relative z-1 flex flex-col gap-5 items-center py-9 px-6">
           <h2 className={cn('wallet-picker-title', 'text-[1.1em] tracking-[0.12em] uppercase m-0')}>
-            Save / Load
+            Artifact
           </h2>
 
-          {/* Draft section */}
-          <div className="flex flex-col gap-3 items-center w-full">
-            <p className="font-mono text-xs tracking-[0.15em] uppercase text-[rgba(0,255,128,0.7)] m-0">
-              Draft
-            </p>
-            <div className="grid grid-cols-2 gap-4 w-full">
-              <div className="flex flex-col items-center gap-2">
-                <MenuButton
-                  onClick={onSaveDraft}
-                  disabled={draftBusy || !engineReady}
-                  className="tracking-[0.12em] uppercase gap-2 w-full"
-                >
-                  <FloppyDiskIcon size={16} weight="bold" className="shrink-0" />
-                  Save
-                </MenuButton>
-                <p className="font-mono text-sm leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
-                  Save your edits as a personal draft
-                </p>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <MenuButton
-                  onClick={onLoadDraft}
-                  disabled={draftBusy || !engineReady || !draftExists}
-                  className="tracking-[0.12em] uppercase gap-2 w-full"
-                >
-                  <ClockCounterClockwiseIcon size={16} weight="bold" className="shrink-0" />
-                  Load
-                </MenuButton>
-                <p className="font-mono text-sm leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
-                  Restore a previously saved draft
-                </p>
-              </div>
+          <div className="flex flex-col gap-4 items-center w-full">
+            <div className="flex flex-col items-center gap-1.5 w-full">
+              <MenuButton
+                onClick={onUpdate}
+                disabled={updateBusy || !engineReady || !canUpdate}
+                className="tracking-[0.12em] uppercase gap-2 w-full"
+              >
+                <FloppyDiskIcon size={16} weight="bold" className={cn("shrink-0", updateBusy && "animate-pulse")} />
+                <span className={cn(updateBusy && "animate-pulse")}>{updateBusy ? 'Saving…' : 'Save'}</span>
+              </MenuButton>
+              <p className="font-mono text-[11px] leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
+                Permanently edit this artifact for everyone to see
+              </p>
             </div>
-          </div>
-
-          {/* Separator */}
-          <div className="canvas-overlay-separator" />
-
-          {/* Artifact section */}
-          <div className="flex flex-col gap-3 items-center w-full">
-            <p className="font-mono text-xs tracking-[0.15em] uppercase text-[rgba(0,255,128,0.7)] m-0">
-              Artifact
-            </p>
-            <div className="grid grid-cols-2 gap-4 w-full">
-              <div className="flex flex-col items-center gap-2">
-                <MenuButton
-                  onClick={onReset}
-                  disabled={updateBusy || !engineReady || !canUpdate}
-                  className="tracking-[0.12em] uppercase gap-2 w-full"
-                >
-                  <ArrowCounterClockwiseIcon size={16} weight="bold" className="shrink-0" />
-                  Reset
-                </MenuButton>
-                <p className="font-mono text-sm leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
-                  Revert changes made in a draft
-                </p>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <MenuButton
-                  onClick={onUpdate}
-                  disabled={updateBusy || !engineReady || !canUpdate}
-                  className="tracking-[0.12em] uppercase gap-2 w-full"
-                >
-                  <ArrowsClockwiseIcon size={16} weight="bold" className={cn("shrink-0", updateBusy && "animate-spin")} />
-                  {updateBusy ? 'Updating…' : 'Update'}
-                </MenuButton>
-                <p className="font-mono text-sm leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
-                  Permanently change this artifact for everyone to see
-                </p>
-              </div>
+            <div className="flex flex-col items-center gap-1.5 w-full">
+              <MenuButton
+                onClick={onReset}
+                disabled={updateBusy || !engineReady || !canUpdate}
+                className="tracking-[0.12em] uppercase gap-2 w-full"
+              >
+                <ArrowCounterClockwiseIcon size={16} weight="bold" className="shrink-0" />
+                Reset
+              </MenuButton>
+              <p className="font-mono text-[11px] leading-tight tracking-[0.05em] text-[rgba(0,255,128,0.35)] m-0 text-center">
+                Revert the auto saved changes made your draft sessions
+              </p>
             </div>
+            
           </div>
 
           {updateResult === 'success' && (
             <p className="font-mono text-xs tracking-[0.05em] text-[rgb(0,255,128)] m-0 text-center">
-              Artifact updated successfully
+              Artifact saved successfully
             </p>
           )}
           {updateResult === 'error' && updateError && (
@@ -140,7 +89,7 @@ export function SaveDialog({
             onClick={onClose}
             className="shadow-none!"
           >
-            Cancel
+            Close
           </MenuButton>
         </div>
       </div>

@@ -141,8 +141,14 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
       state.currentMode = 'trickle';
     },
     eraseMovement() {
-      state.currentMode = 'erase';
-      state.eraseVariant = 'movement';
+      if (state.currentMode !== 'erase') {
+        state.currentMode = 'erase';
+        state.eraseVariant = 'movement';
+      } else if (state.eraseVariant === 'both') {
+        state.eraseVariant = 'movement';
+      } else {
+        state.eraseVariant = 'both';
+      }
     },
     freezeBrush() {
       state.currentMode = 'freeze';
@@ -164,8 +170,14 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
       state.currentMode = 'static';
     },
     resetInitialMovement() {
-      state.currentMode = 'erase';
-      state.eraseVariant = 'paint';
+      if (state.currentMode !== 'erase') {
+        state.currentMode = 'erase';
+        state.eraseVariant = 'paint';
+      } else if (state.eraseVariant === 'both') {
+        state.eraseVariant = 'paint';
+      } else {
+        state.eraseVariant = 'both';
+      }
     },
 
     // Global

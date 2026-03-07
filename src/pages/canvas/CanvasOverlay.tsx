@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
 import { NftBrowser, loadNftIntoEngine, loadNftIntoEngineAsync, loadSketchSeed } from './NftBrowser';
-import { XIcon, CaretLineLeft, CaretLineRight, FloppyDiskIcon, ShuffleIcon } from '@phosphor-icons/react';
+import { XIcon, CaretLineLeft, CaretLineRight, ShuffleIcon, FloppyDiskIcon } from '@phosphor-icons/react';
 import { SaveDialog } from './SaveDialog';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
@@ -21,7 +21,7 @@ import {
 } from '../../store/atoms';
 import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
-import { saveDraft, loadDraft, hasDraft } from '../../services/draft-storage';
+import { saveDraft } from '../../services/draft-storage';
 import { UPDATE_API_URL } from '../../../config/env';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import './canvas-overlay.css';
@@ -75,37 +75,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
   const currentNft = browserItems.length > 0 ? browserItems[browseIndex] : null;
   const isBrowsing = activeTab !== 'sketch' && browserItems.length > 0;
 
-  // --- Draft save/load for owned NFTs ---
-  const [draftExists, setDraftExists] = useState(false);
-  const [draftBusy, setDraftBusy] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-
-  // Check if a draft exists whenever the active owned NFT changes
-  useEffect(() => {
-    if (activeTab !== 'owned' || !currentNft) { setDraftExists(false); return; }
-    hasDraft(currentNft.id).then(setDraftExists).catch(() => setDraftExists(false));
-  }, [activeTab, currentNft]);
-
-  const handleSaveDraft = useCallback(async () => {
-    if (!engine || !currentNft || draftBusy) return;
-    setDraftBusy(true);
-    try {
-      const state = await engine.serializeState();
-      await saveDraft(currentNft.id, state, currentNft.defaultWaterfallMode, engine.isManualMode());
-      setDraftExists(true);
-    } catch (err) { console.error('Draft save failed:', err); }
-    setDraftBusy(false);
-  }, [engine, currentNft, draftBusy]);
-
-  const handleLoadDraft = useCallback(async () => {
-    if (!engine || !currentNft || draftBusy) return;
-    setDraftBusy(true);
-    try {
-      const draft = await loadDraft(currentNft.id);
-      if (draft) loadNftIntoEngine(engine, currentNft, draft);
-    } catch (err) { console.error('Draft load failed:', err); }
-    setDraftBusy(false);
-  }, [engine, currentNft, draftBusy]);
 
   // --- On-chain update ---
   const [updateBusy, setUpdateBusy] = useState(false);
@@ -129,7 +99,6 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
       // 1. Save draft as safety net
       const state = await engine.serializeState();
       await saveDraft(currentNft.id, state, currentNft.defaultWaterfallMode, engine.isManualMode());
-      setDraftExists(true);
 
       // 2. Sign confirmation message
       const message = `Confirm permanent update of ${currentNft.name} (asset: ${currentNft.id})`;
@@ -173,14 +142,14 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
   const handleReset = useCallback(() => {
     if (!engine || !currentNft) return;
-    loadNftIntoEngine(engine, currentNft);
+    loadNftIntoEngine(engine, currentNft, null);
   }, [engine, currentNft]);
 
   // After a successful mint, load the newly minted NFT into the engine
   useEffect(() => {
     if (!pendingMintLoad || !engine || !currentNft) return;
     setPendingMintLoad(false);
-    loadNftIntoEngine(engine, currentNft);
+    loadNftIntoEngine(engine, currentNft, null);
   }, [pendingMintLoad, engine, currentNft, setPendingMintLoad]);
 
   // On first overlay open after engine creation: load the correct content for
@@ -196,7 +165,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     const tabId = activeTab === 'owned' ? activeOwnedId : activeDiscoverId;
     const idx = indexFromId(tabItems, tabId);
     const nft = tabItems[idx];
-    if (nft) loadNftIntoEngine(engine, nft);
+    if (nft) loadNftIntoEngine(engine, nft, activeTab === 'discover' ? null : undefined);
   }, [activeTab, engine, pendingMintLoad, needsInitialLoad, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
 
   const controlBottom = useMemo(() => {
@@ -251,7 +220,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     const tabId = tab === 'owned' ? activeOwnedId : activeDiscoverId;
     const idx = indexFromId(tabItems, tabId);
     const nft = tabItems[idx];
-    if (nft) loadNftIntoEngine(engine, nft);
+    if (nft) loadNftIntoEngine(engine, nft, tab === 'discover' ? null : undefined);
   }, [activeTab, setOverlayTab, triggerGlitch, engine, sketchSeed, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
 
   // --- Sketch tab swipe handling ---
@@ -310,7 +279,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
     try {
       // 2-3. Load next NFT into engine (canvas hidden behind screenshot)
-      await loadNftIntoEngineAsync(engine, nft);
+      await loadNftIntoEngineAsync(engine, nft, activeTab === 'discover' ? null : undefined);
     } catch (err) {
       console.warn('[Carousel] Failed to load NFT, skipping transition:', err);
     }
@@ -492,12 +461,8 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
       <SaveDialog
         open={saveDialogOpen}
         onClose={() => setSaveDialogOpen(false)}
-        onSaveDraft={handleSaveDraft}
-        onLoadDraft={handleLoadDraft}
         onUpdate={handleUpdate}
         onReset={handleReset}
-        draftBusy={draftBusy}
-        draftExists={draftExists}
         engineReady={!!engine}
         canUpdate={canUpdate}
         updateBusy={updateBusy}

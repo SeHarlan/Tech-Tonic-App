@@ -26,7 +26,8 @@
       "WebFetch(domain:docs.solflare.com)",
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:arweave-tools.irys.xyz)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npx vite build 2>&1 | tail -15)"
     ]
   }
 }

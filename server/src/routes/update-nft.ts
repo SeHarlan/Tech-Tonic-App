@@ -163,7 +163,7 @@ route.post('/api/update-nft', async (c) => {
     paintUri = ptUri;
 
     // 6. Build updated metadata + upload to Irys
-    const newMetadata = buildUpdatedMetadata(existing, imageUri, movementUri, paintUri);
+    const newMetadata = buildUpdatedMetadata(existing, imageUri, movementUri, paintUri, walletAddress);
     newMetadataUri = await uploadMetadataJson(
       newMetadata as unknown as Record<string, unknown>,
     );

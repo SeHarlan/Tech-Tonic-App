@@ -2,6 +2,7 @@ import { useRef, useCallback } from 'react';
 import { CaretDoubleLeft, CaretDoubleRight } from '@phosphor-icons/react';
 import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
+import { loadDraft } from '../../services/draft-storage';
 import type { DraftData } from '../../services/draft-storage';
 
 interface NftBrowserProps {
@@ -32,6 +33,11 @@ export function loadNftIntoEngine(engine: Engine, nft: NftItem, draft?: DraftDat
 }
 
 export async function loadNftIntoEngineAsync(engine: Engine, nft: NftItem, draft?: DraftData | null) {
+  // Auto-load: when draft is undefined (not explicitly null), check storage
+  if (draft === undefined) {
+    try { draft = await loadDraft(nft.id); } catch { draft = null; }
+  }
+
   // Priority: local draft > on-chain buffers > default thumbnail
   let draftState: { imageBuffer: Blob; movementBuffer: Blob; paintBuffer: Blob; totalFrameCount: number } | undefined;
   let manualMode = nft.manualMode;

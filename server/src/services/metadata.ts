@@ -61,6 +61,7 @@ export function buildUpdatedMetadata(
   imageUri: string,
   movementUri: string,
   paintUri: string,
+  walletAddress: string,
 ): NftMetadata {
   // Increment Iteration attribute
   let foundIteration = false;
@@ -77,6 +78,20 @@ export function buildUpdatedMetadata(
   });
   if (!foundIteration) {
     attributes.push({ trait_type: 'Iteration', value: '1' });
+  }
+
+  // Track unique editor wallet addresses
+  const editorsIdx = attributes.findIndex((a) => a.trait_type === 'Editors');
+  if (editorsIdx === -1) {
+    attributes.push({ trait_type: 'Editors', value: walletAddress });
+  } else {
+    const editors = attributes[editorsIdx].value.split(',');
+    if (!editors.includes(walletAddress)) {
+      attributes[editorsIdx] = {
+        ...attributes[editorsIdx],
+        value: attributes[editorsIdx].value + ',' + walletAddress,
+      };
+    }
   }
 
   return {

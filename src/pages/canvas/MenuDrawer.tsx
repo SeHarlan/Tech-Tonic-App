@@ -63,7 +63,7 @@ function dispatchToEngine(
       break;
     case 'eraseMovement':
       engine.setDrawMode('erase');
-      engine.setEraseVariant('movement');
+      engine.setEraseVariant((menuState.eraseVariant as EraseVariant) ?? 'movement');
       break;
     case 'freezeBrush':
       engine.setDrawMode('freeze');
@@ -86,7 +86,7 @@ function dispatchToEngine(
       break;
     case 'resetInitialMovement':
       engine.setDrawMode('erase');
-      engine.setEraseVariant('paint');
+      engine.setEraseVariant((menuState.eraseVariant as EraseVariant) ?? 'paint');
       break;
 
     // Global

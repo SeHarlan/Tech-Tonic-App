@@ -290,29 +290,38 @@ export function MintPage() {
               TechTonic
             </h1>
 
+            <p className="mint-subheader text-center text-[rgba(0,255,128,0.5)] font-mono -mt-4">
+              Season One
+            </p>
             {/* Separator */}
             <div className="mint-separator" />
             {/* Subheader */}
-            <p className="mint-subheader text-center text-[10px] text-[rgba(0,255,128,0.4)] font-mono">
-              Season One // Limit 3 Per Wallet
-            </p>
-
-            {/* Mint count */}
-
-            <p className="font-mono text-xs text-[rgba(0,255,128,0.5)] tracking-[0.2em] -mt-4">
+            <p className="mint-subheader text-[10px] text-[rgba(0,255,128,0.54)]">
               {mintCount ? (
                 <span>
-                  {mintCount.minted} / {mintCount.total} minted
+                  {mintCount.minted} out of {mintCount.total} minted
                 </span>
               ) : (
                 <span>Loading...</span>
               )}
             </p>
 
-            {/* Description */}
-            <p className="text-center text-sm text-[rgba(0,255,128,0.55)] font-mono max-w-xs leading-relaxed -mt-2">
-              Each mint is randomly assigned from the collection.
+            {/* Progress bar */}
+            {mintCount && (
+              <div className="w-full -mt-4">
+                <div className="h-1.5 w-full rounded-full border border-[rgba(0,255,128,0.2)] overflow-hidden">
+                  <div
+                    className="h-full bg-[rgba(0,255,128,0.6)] transition-all duration-500"
+                    style={{ width: `${(mintCount.minted / mintCount.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <p className="mint-subheader text-[10px] text-[rgba(0,255,128,0.54)] -mt-4">
+              <span>Limit 3 Per Wallet</span>
             </p>
+
             {/* Separator */}
             <div className="mint-separator" />
 
@@ -422,8 +431,10 @@ export function MintPage() {
                 Home
               </MenuButton>
               <WalletButton
-                className={cn("text-sm tracking-widest mint-action-btn", !isConnected && "mint-action-btn")}
-            
+                className={cn(
+                  "text-sm tracking-widest mint-action-btn",
+                  !isConnected && "mint-action-btn",
+                )}
               />
             </div>
           </div>

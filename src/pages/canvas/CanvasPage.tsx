@@ -1,10 +1,12 @@
 import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useAtomValue } from 'jotai';
+import { FloppyDiskIcon } from '@phosphor-icons/react';
 import { createEngine, type Engine } from '../../engine/renderer';
 import { cn } from '../../utils/ui-helpers';
 import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
 import { CanvasOverlay, type SlidePhase } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
+import { useAutoDraft } from '../../hooks/useAutoDraft';
 import { sketchSeedAtom, pendingMintLoadAtom, overlayTabAtom } from '../../store/atoms';
 import './canvas-overlay.css';
 
@@ -176,6 +178,7 @@ export function CanvasPage() {
   const pendingMintLoad = useAtomValue(pendingMintLoadAtom);
   const currentTab = useAtomValue(overlayTabAtom);
   const { isOverlayOpen, openOverlay, closeOverlay } = useOverlay();
+  const { isSaving, saveNow } = useAutoDraft(engine);
   const isInitialRender = useRef(true);
   const needsInitialLoad = useRef(true);
 
@@ -254,12 +257,13 @@ export function CanvasPage() {
       closeOverlay();
       engine?.setGlobalFreeze(false);
     } else {
+      saveNow();
       menuDrawerRef.current?.close();
       engine?.setGlobalFreeze(true);
       computeCanvasBottom();
       openOverlay();
     }
-  }, [engine, isOverlayOpen, openOverlay, closeOverlay, computeCanvasBottom]);
+  }, [engine, isOverlayOpen, openOverlay, closeOverlay, computeCanvasBottom, saveNow]);
 
   const handleOverlayClose = useCallback(() => {
       closeOverlay();
@@ -340,6 +344,13 @@ export function CanvasPage() {
         onPointerCancel={onPointerUp}
       />
       <BrushOverlay ref={brushOverlayRef} engine={engine} canvasRef={canvasRef} hidden={isOverlayOpen} />
+      <div className={cn(
+        "fixed top-4 left-4 z-100 pointer-events-none flex items-center gap-1.5 transition-opacity duration-500 ease-in-out",
+        isSaving ? "opacity-100" : "opacity-0",
+      )}>
+        <FloppyDiskIcon size={16} weight="bold" className="text-[rgba(0,255,128,0.6)] animate-pulse" />
+        <span className="font-mono text-[10px] tracking-[0.15em] uppercase text-[rgba(0,255,128,0.5)]">draft saved</span>
+      </div>
       <MenuDrawer ref={menuDrawerRef} engine={engine} onAppMenu={toggleOverlay} onBrushSizeChange={() => brushOverlayRef.current?.refresh()} hidden={isOverlayOpen} />
 
       {isOverlayOpen && (
