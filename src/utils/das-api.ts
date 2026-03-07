@@ -105,6 +105,15 @@ async function dasRpc<T>(method: string, params: Record<string, unknown>): Promi
 }
 
 /** Fetch all minted assets in a collection via DAS */
+function extractNumber(name: string): number {
+  const m = name.match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : Infinity;
+}
+
+function sortByName(items: NftItem[]): NftItem[] {
+  return items.sort((a, b) => extractNumber(a.name) - extractNumber(b.name));
+}
+
 export async function fetchCollectionAssets(collectionAddress: string): Promise<NftItem[]> {
   const result = await dasRpc<{ items: DasAsset[] }>('getAssetsByGroup', {
     groupKey: 'collection',
@@ -112,7 +121,7 @@ export async function fetchCollectionAssets(collectionAddress: string): Promise<
     page: 1,
     limit: 1000,
   });
-  return result.items.map(assetToNftItem);
+  return sortByName(result.items.map(assetToNftItem));
 }
 
 /** Estimate an optimal priority fee via Helius getPriorityFeeEstimate */
@@ -150,7 +159,7 @@ export async function fetchOwnedCollectionAssets(
       limit: 1000,
     });
     console.log(`[DAS] searchAssets returned ${result.items.length} items`);
-    return result.items.map(assetToNftItem);
+    return sortByName(result.items.map(assetToNftItem));
   } catch (err) {
     console.warn('[DAS] searchAssets failed, falling back to getAssetsByOwner:', err);
     const result = await dasRpc<{ items: DasAsset[] }>('getAssetsByOwner', {
@@ -164,6 +173,6 @@ export async function fetchOwnedCollectionAssets(
       ),
     );
     console.log(`[DAS] getAssetsByOwner returned ${result.items.length} total, ${filtered.length} in collection`);
-    return filtered.map(assetToNftItem);
+    return sortByName(filtered.map(assetToNftItem));
   }
 }
