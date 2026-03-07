@@ -1,3 +1,5 @@
+import { RECORD_DURATION_SECONDS } from '../recording';
+
 // --- Types ---
 
 export interface MenuState {
@@ -52,6 +54,7 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   const actionBar = document.getElementById('engine-action-bar');
   const systemBtn = document.getElementById('btn-system');
   const toolsBtn = document.getElementById('btn-tools');
+  const recordBtn = document.getElementById('btn-record');
 
   // ---- State ----
   const state: MenuState = {
@@ -193,7 +196,22 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
     // Passthrough actions — state doesn't change, consumer handles them
     newSeed() {},
     saveScreenshot() {},
-    recordVideo() {},
+    recordVideo() {
+      // Sync button visual when triggered via keyboard ('R')
+      isRecording = !isRecording;
+      if (recordBtn) recordBtn.classList.toggle('recording', isRecording);
+      if (recordTimeoutId !== null) {
+        clearTimeout(recordTimeoutId);
+        recordTimeoutId = null;
+      }
+      if (isRecording) {
+        recordTimeoutId = setTimeout(() => {
+          isRecording = false;
+          if (recordBtn) recordBtn.classList.remove('recording');
+          recordTimeoutId = null;
+        }, RECORD_DURATION_SECONDS * 1000);
+      }
+    },
   };
 
   // ---- Dispatch helper (runs action + updates UI + notifies) ----
@@ -292,8 +310,15 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   // ---- Click delegation (menu panel buttons) ----
   function handleClick(e: MouseEvent) {
     if (isMenuAnimating) return;
-    const el = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
-    if (!el) return;
+    const target = e.target as HTMLElement;
+    const el = target.closest('[data-action]') as HTMLElement | null;
+
+    // If click wasn't on an interactive element, close the menu
+    if (!el) {
+      const isInteractive = target.closest('.brush-size-display, .mode-toggle');
+      if (!isInteractive) closeMenu();
+      return;
+    }
 
     e.preventDefault();
     e.stopPropagation();
@@ -370,6 +395,18 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   }
   if (toolsBtn) {
     toolsBtn.addEventListener('pointerdown', handleToolsClick);
+  }
+
+  // ---- Action bar: RECORD button ----
+  // TODO: Replace manual timeout with programmatic callback from engine when recording stops
+  let isRecording = false;
+  let recordTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  function handleRecordClick(e: MouseEvent) {
+    e.stopPropagation();
+    dispatch('recordVideo');
+  }
+  if (recordBtn) {
+    recordBtn.addEventListener('click', handleRecordClick);
   }
 
   // ---- Click outside to close ----
@@ -589,6 +626,8 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
       }
       if (systemBtn) systemBtn.removeEventListener('click', handleSystemClick);
       if (toolsBtn) toolsBtn.removeEventListener('pointerdown', handleToolsClick);
+      if (recordBtn) recordBtn.removeEventListener('click', handleRecordClick);
+      if (recordTimeoutId !== null) clearTimeout(recordTimeoutId);
     },
   };
 }

@@ -24,8 +24,36 @@
     transform: translateX(-50%) translateY(100%);
 }
 
-.action-bar-btn {
+.action-bar-icon {
+    flex: none;
+    width: var(--action-bar-height);
+}
+
+#btn-system {
+    font-size: 18px;
+    padding-bottom: 2px;
+}
+
+#btn-tools {
     flex: 1;
+}
+
+#btn-record {
+    font-size: 14px;
+}
+
+#btn-record.recording {
+    color: rgba(255, 60, 60, 0.95);
+    text-shadow: 0 0 8px rgba(255, 0, 0, 0.6);
+    animation: record-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes record-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.action-bar-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -44,11 +72,33 @@
 }
 
 
+/* Brighter CRT lines on hover — layered above the base bar scanlines */
+.action-bar-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 3px,
+        rgba(0, 255, 128, 0.04) 3px,
+        rgba(0, 255, 128, 0.04) 4px
+    );
+    background-attachment: fixed;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+    z-index: 1;
+}
+
 @media (hover: hover) {
     .action-bar-btn:hover {
         color: rgba(0, 255, 128, 0.9);
         background: rgba(0, 255, 128, 0.03);
         border-color: rgba(0, 255, 128, 0.4);
+    }
+    .action-bar-btn:hover::before {
+        opacity: 1;
     }
 }
 
@@ -146,14 +196,26 @@
     box-sizing: border-box;
 }
 
-/* Bottom-left border — closes off the panel above SYSTEM,
-   open on the right to merge with TOOLS */
+/* Bottom-left border — closes off the panel above the menu button */
 #menu-panel::before {
     content: '';
     position: absolute;
     bottom: 0;
     left: 0;
-    width: 50%;
+    width: var(--action-bar-height);
+    height: 0;
+    border-top: 1px solid rgba(0, 255, 128, 0.5);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Bottom-right border — mirrors bottom-left above the record button */
+#menu-container::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: var(--action-bar-height);
     height: 0;
     border-top: 1px solid rgba(0, 255, 128, 0.5);
     pointer-events: none;
