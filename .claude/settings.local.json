@@ -21,7 +21,12 @@
       "WebFetch(domain:mpl-candy-machine.typedoc.metaplex.com)",
       "WebFetch(domain:mpl-core-candy-machine.typedoc.metaplex.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:www.helius.dev)"
+      "WebFetch(domain:www.helius.dev)",
+      "WebFetch(domain:help.magiceden.io)",
+      "WebFetch(domain:docs.solflare.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:arweave-tools.irys.xyz)",
+      "WebFetch(domain:www.npmjs.com)"
     ]
   }
 }

@@ -179,6 +179,15 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
     });
   }, [engine, hidden]);
 
+  // Show/hide action bar via controller when overlay toggles
+  useEffect(() => {
+    if (!menuRef.current) return;
+    if (hidden) {
+      menuRef.current.hide();
+    } else {
+      menuRef.current.show();
+    }
+  }, [hidden]);
 
-  return <div ref={wrapperRef} style={hidden ? { visibility: 'hidden' } : undefined} />;
+  return <div ref={wrapperRef} />;
 });

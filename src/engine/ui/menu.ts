@@ -24,6 +24,8 @@ export interface MenuController {
   setState(partial: Partial<MenuState>): void;
   open(): void;
   close(): void;
+  show(): void;
+  hide(): void;
   updateActiveStates(): void;
   updateBrushDisplay(): void;
   destroy(): void;
@@ -46,6 +48,11 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   }
   const menuContainer: HTMLElement = menuContainerResult;
 
+  // ---- Action bar refs ----
+  const actionBar = document.getElementById('engine-action-bar');
+  const systemBtn = document.getElementById('btn-system');
+  const toolsBtn = document.getElementById('btn-tools');
+
   // ---- State ----
   const state: MenuState = {
     currentMode: 'waterfall',
@@ -65,6 +72,7 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
 
   let isMenuOpen = false;
   let isMenuAnimating = false;
+  let animTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Brush drag state
   let isDraggingBrushSize = false;
@@ -281,7 +289,7 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   }
   window.addEventListener('keydown', handleKeyDown);
 
-  // ---- Click delegation ----
+  // ---- Click delegation (menu panel buttons) ----
   function handleClick(e: MouseEvent) {
     if (isMenuAnimating) return;
     const el = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
@@ -301,17 +309,26 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
   menuContainer.addEventListener('click', handleClick);
 
   // ---- Open / Close ----
+  function clearAnimGuard() {
+    isMenuAnimating = false;
+    if (animTimeoutId !== null) {
+      clearTimeout(animTimeoutId);
+      animTimeoutId = null;
+    }
+  }
+
   function openMenu() {
     if (!menuContainer || isMenuAnimating) return;
     isMenuAnimating = true;
     menuContainer.addEventListener('transitionend', function onEnd() {
-      isMenuAnimating = false;
+      clearAnimGuard();
       menuContainer.removeEventListener('transitionend', onEnd);
     });
-    setTimeout(() => { isMenuAnimating = false; }, 300);
+    animTimeoutId = setTimeout(clearAnimGuard, 300);
 
     menuContainer.classList.remove('menu-closed');
     isMenuOpen = true;
+    if (toolsBtn) toolsBtn.classList.add('active');
     updateBrushDisplay();
     updateActiveStates();
   }
@@ -320,34 +337,45 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
     if (!menuContainer || !isMenuOpen || isMenuAnimating) return;
     isMenuAnimating = true;
     menuContainer.addEventListener('transitionend', function onEnd() {
-      isMenuAnimating = false;
+      clearAnimGuard();
       menuContainer.removeEventListener('transitionend', onEnd);
     });
-    setTimeout(() => { isMenuAnimating = false; }, 300);
+    animTimeoutId = setTimeout(clearAnimGuard, 300);
 
     menuContainer.classList.add('menu-closed');
     isMenuOpen = false;
+    if (toolsBtn) toolsBtn.classList.remove('active');
   }
 
-  // ---- Drawer handle tap ----
-  const drawerHandle = document.getElementById('drawer-handle');
-  function handleDrawerTap(e: PointerEvent) {
-    if (isMenuAnimating) return;
+  // ---- Action bar: SYSTEM button ----
+  function handleSystemClick(e: PointerEvent) {
     e.stopPropagation();
+    dispatch('openAppMenu');
+  }
+  if (systemBtn) {
+    systemBtn.addEventListener('pointerdown', handleSystemClick);
+  }
+
+  // ---- Action bar: TOOLS button ----
+  function handleToolsClick(e: PointerEvent) {
+    e.stopPropagation();
+    if (isMenuAnimating) return;
     if (isMenuOpen) {
       closeMenu();
     } else {
       openMenu();
     }
   }
-  if (drawerHandle) {
-    drawerHandle.addEventListener('pointerdown', handleDrawerTap);
+  if (toolsBtn) {
+    toolsBtn.addEventListener('pointerdown', handleToolsClick);
   }
 
   // ---- Click outside to close ----
   function handleClickOutside(e: PointerEvent) {
     if (!isMenuOpen || !menuContainer || isMenuAnimating) return;
     if (menuContainer.contains(e.target as Node)) return;
+    // Don't close when clicking the action bar
+    if (actionBar?.contains(e.target as Node)) return;
     closeMenu();
   }
   document.addEventListener('pointerdown', handleClickOutside);
@@ -530,13 +558,22 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
 
     open: openMenu,
     close: closeMenu,
+
+    show() {
+      if (actionBar) actionBar.classList.remove('bar-hidden');
+    },
+
+    hide() {
+      closeMenu();
+      if (actionBar) actionBar.classList.add('bar-hidden');
+    },
+
     updateActiveStates,
     updateBrushDisplay,
 
     destroy() {
       menuContainer.removeEventListener('click', handleClick);
       window.removeEventListener('keydown', handleKeyDown);
-      if (drawerHandle) drawerHandle.removeEventListener('pointerdown', handleDrawerTap);
       document.removeEventListener('pointerdown', handleClickOutside);
       document.removeEventListener('mousemove', handleBrushDrag as EventListener);
       document.removeEventListener('touchmove', handleBrushDrag as EventListener);
@@ -546,6 +583,8 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
         brushDisplay.removeEventListener('mousedown', startBrushDrag as EventListener);
         brushDisplay.removeEventListener('touchstart', startBrushDrag as EventListener);
       }
+      if (systemBtn) systemBtn.removeEventListener('pointerdown', handleSystemClick);
+      if (toolsBtn) toolsBtn.removeEventListener('pointerdown', handleToolsClick);
     },
   };
 }

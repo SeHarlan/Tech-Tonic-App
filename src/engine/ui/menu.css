@@ -1,70 +1,147 @@
-/* ===== MENU CONTAINER (DRAWER) ===== */
-#menu-container {
+/* ===== ENGINE ACTION BAR ===== */
+/* Shared height var — keep in sync with ACTION_BAR_HEIGHT in CanvasPage.tsx */
+:root {
+    --action-bar-height: 44px;
+}
+
+#engine-action-bar {
     position: fixed;
     bottom: 0;
     left: 50%;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%);
     z-index: 500;
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-    transition: transform 0.25s ease-out;
-    padding-bottom: 24px;
+    height: var(--action-bar-height);
+    width: min(100vw, calc((100vh - var(--action-bar-height)) * 9 / 16));
+    background: rgba(0, 0, 0, 0.95);
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+    transition: transform 0.3s ease-out;
 }
 
-#menu-container.menu-closed {
-    transform: translateX(-50%) translateY(calc(100% - 40px));
+#engine-action-bar.bar-hidden {
+    transform: translateX(-50%) translateY(100%);
+}
+
+.action-bar-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-top: none;
+    color: rgba(0, 255, 128, 0.6);
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, text-shadow 0.15s ease, border-color 0.15s ease;
+    position: relative;
+}
+
+
+@media (hover: hover) {
+    .action-bar-btn:hover {
+        color: rgba(0, 255, 128, 0.9);
+        background: rgba(0, 255, 128, 0.03);
+        border-color: rgba(0, 255, 128, 0.4);
+    }
+}
+
+.action-bar-btn:active {
+    color: rgba(0, 255, 128, 1);
+    background: rgba(0, 255, 128, 0.05);
+}
+
+/* Active state for TOOLS button when menu is open */
+.action-bar-btn.active {
+    color: rgba(0, 255, 128, 1);
+    background: rgba(0, 20, 10, 0.98);
+    text-shadow: 0 0 8px rgba(0, 255, 128, 0.5);
+    border-width: 1px;
+    border-color: rgba(0, 255, 128, 0.5);
+}
+
+.action-bar-label {
     pointer-events: none;
 }
 
-#menu-container.menu-closed #drawer-handle {
-    pointer-events: auto;
-}
 
-/* ===== DRAWER HANDLE ===== */
-#drawer-handle {
-    width: 80px;
+/* ===== MENU CONTAINER (DRAWER) ===== */
+#menu-container {
+    position: fixed;
+    bottom: var(--action-bar-height);
+    left: 50%;
+    transform: translateX(-50%) translateY(0);
+    z-index: 500;
+    background: rgba(0, 20, 10, 0.98);
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: 8px 0;
-    gap: 4px;
+    transition: transform 0.25s ease-out;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    /* Match action bar width so edges align */
+    width: min(100vw, calc((100vh - var(--action-bar-height)) * 9 / 16) );
 }
 
-.drawer-handle-bar {
-    width: 40px;
-    height: 3px;
-    background: rgba(0, 255, 128, 0.7);
-    border-radius: 2px;
-    transition: background 0.15s ease, width 0.15s ease, box-shadow 0.15s ease;
-    box-shadow:
-        0 0 6px rgba(0, 255, 128, 0.5),
-        0 0 14px rgba(0, 255, 128, 0.25);
-}
-
-#drawer-handle:hover .drawer-handle-bar,
-#drawer-handle:active .drawer-handle-bar {
-    background: rgba(0, 255, 128, 0.75);
-    width: 46px;
-    box-shadow:
-        0 0 8px rgba(0, 255, 128, 0.6),
-        0 0 20px rgba(0, 255, 128, 0.35);
+#menu-container.menu-closed {
+    transform: translateX(-50%) translateY(calc(100% + var(--action-bar-height)));
+    pointer-events: none;
 }
 
 #menu-panel {
-    background: rgba(0, 0, 0, 0.95);
+    background: rgba(0, 20, 10, 0.98);
     border: 1px solid rgba(0, 255, 128, 0.5);
+    border-bottom: none;
     padding: 12px;
+    padding-top: 4px;
     display: flex;
     flex-direction: column;
     gap: 8px;
     position: relative;
+    overflow: hidden;
+    /* Fill the container width */
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Bottom-left border — closes off the panel above SYSTEM,
+   open on the right to merge with TOOLS */
+#menu-panel::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 50%;
+    height: 0;
+    border-top: 1px solid rgba(0, 255, 128, 0.5);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* CRT scanlines — shared across menu panel and action bar.
+   background-attachment: fixed keeps lines aligned between both elements. */
+#menu-panel::after,
+#engine-action-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 3px,
+        rgba(0, 255, 128, 0.03) 3px,
+        rgba(0, 255, 128, 0.03) 4px
+    );
+    background-attachment: fixed;
+    pointer-events: none;
+    z-index: 0;
 }
 
 /* ===== MODE TOGGLE ===== */
@@ -81,13 +158,13 @@
 
 .mode-toggle-label {
     font-family: 'Courier New', monospace;
-    font-size: 10px;
+    font-size: 8px;
     text-transform: uppercase;
     letter-spacing: 1px;
     color: rgba(0, 255, 128, 0.35);
     transition: color 0.2s ease, text-shadow 0.2s ease;
-    min-width: 48px;
-    text-align: center;
+    width: 36px;
+    text-align: right;
 }
 
 .mode-toggle-label.active-label {
@@ -132,8 +209,10 @@
 /* ===== MAIN ROW ===== */
 .main-row {
     display: flex;
-    gap: 12px;
     align-items: flex-end;
+    justify-content: center;
+    padding: 4px;
+    gap: 22px;
 }
 
 /* ===== BASE BUTTON STYLE ===== */
@@ -173,41 +252,6 @@
 }
 
 
-/* Scanline sweep — GPU composited via transform */
-.menu-btn.active::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-        to bottom,
-        transparent 45%,
-        rgba(255, 255, 255, 0.06) 49%,
-        rgba(255, 255, 255, 0.1) 50%,
-        rgba(255, 255, 255, 0.06) 51%,
-        transparent 55%
-    );
-    animation: pip-scanline 2.5s linear infinite;
-    pointer-events: none;
-    will-change: transform;
-}
-
-/* Horizontal artifact — brief glitch bar */
-.menu-btn.active::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 2px;
-    background: currentColor;
-    opacity: 0;
-    pointer-events: none;
-    will-change: transform, opacity;
-    animation: pip-artifact 6s steps(1) infinite;
-}
 
 @keyframes pip-scanline {
     0%   { transform: translateY(0); }
@@ -356,7 +400,11 @@
 .movement-section {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    align-items: center;
+}
+
+.menu-spacer {
+  min-height: 16px;
 }
 
 .cross-container {
@@ -405,14 +453,6 @@
 
 /* ===== MOBILE RESPONSIVENESS ===== */
 @media (max-width: 480px) {
-    #menu-container {
-        padding-bottom: 12px;
-    }
-
-    #menu-container.menu-closed {
-        transform: translateX(-50%) translateY(calc(100% - 26px));
-    }
-
     #menu-panel {
         padding: 8px;
     }
@@ -441,6 +481,11 @@
     .section-label {
         font-size: 8px;
     }
+
+    .action-bar-btn {
+        font-size: 10px;
+        letter-spacing: 2px;
+    }
 }
 
 /* ===== TOUCH FEEDBACK ===== */
@@ -452,5 +497,10 @@
 
     .brush-size-display:active {
         border-color: rgba(0, 255, 128, 0.8);
+    }
+
+    .action-bar-btn:active {
+        color: rgba(0, 255, 128, 1);
+        background: rgba(0, 255, 128, 0.1);
     }
 }
