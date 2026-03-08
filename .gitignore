@@ -29,3 +29,6 @@ dist-ssr
 
 # Candy Machine pipeline outputs
 generated/
+
+# Generated thumbnails (local only)
+public/thumbnails/
