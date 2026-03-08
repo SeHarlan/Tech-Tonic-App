@@ -28,7 +28,7 @@ import { useSetAtom } from 'jotai';
 import { useOverlay } from '../../hooks/useOverlay';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useRefreshOwned } from '../../hooks/useRefreshOwned';
-import { activeOwnedNftIdAtom, pendingMintLoadAtom } from '../../store/atoms';
+import { activeOwnedNftIdAtom, discoverNftsAtom, pendingMintLoadAtom } from '../../store/atoms';
 import { fetchPriorityFee } from '../../utils/das-api';
 import './mint-page.css';
 
@@ -69,6 +69,7 @@ export function MintPage() {
   const refreshOwned = useRefreshOwned();
   const setActiveOwnedNftId = useSetAtom(activeOwnedNftIdAtom);
   const setPendingMintLoad = useSetAtom(pendingMintLoadAtom);
+  const setDiscoverNfts = useSetAtom(discoverNftsAtom);
 
   const [status, setStatus] = useState<MintStatus>('idle');
   const [retrieving, setRetrieving] = useState(false);
@@ -259,6 +260,7 @@ export function MintPage() {
       const newNft = finalList.find((n) => !prevIds.has(n.id));
 
       if (newNft) {
+        setDiscoverNfts((prev) => [...prev, newNft].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })));
         setActiveOwnedNftId(newNft.id);
         setPendingMintLoad(true);
         openOverlay('owned');
@@ -420,7 +422,7 @@ export function MintPage() {
                   </p>
                   {retrieving && (
                     <p className="text-[rgba(0,255,128,0.4)] font-mono text-xs animate-pulse tracking-widest uppercase">
-                      Retrieving from chain...
+                      Retrieving...
                     </p>
                   )}
                 </div>

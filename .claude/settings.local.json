@@ -27,7 +27,11 @@
       "WebFetch(domain:medium.com)",
       "WebFetch(domain:arweave-tools.irys.xyz)",
       "WebFetch(domain:www.npmjs.com)",
-      "Bash(npx vite build 2>&1 | tail -15)"
+      "Bash(npx vite build 2>&1 | tail -15)",
+      "WebFetch(domain:docs.solanamobile.com)",
+      "WebFetch(domain:solana-mobile.github.io)",
+      "WebFetch(domain:blog.solanamobile.com)",
+      "WebFetch(domain:capacitorjs.com)"
     ]
   }
 }
