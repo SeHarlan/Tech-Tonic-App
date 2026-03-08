@@ -25,5 +25,6 @@ console.log(`[server] Listening on port ${PORT}`);
 
 export default {
   port: PORT,
+  hostname: '0.0.0.0',
   fetch: app.fetch,
 };
