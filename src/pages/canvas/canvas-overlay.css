@@ -338,6 +338,20 @@
   );
 }
 
+/* Static CRT lines only (no sweep) */
+.save-dialog-crt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 3px,
+    rgba(0, 255, 128, 0.03) 3px,
+    rgba(0, 255, 128, 0.03) 4px
+  );
+}
+
 /* Sweeping scan line — same as the overlay */
 .wallet-picker-scanlines::after {
   content: '';

@@ -37,7 +37,7 @@ export function SaveDialog({
         className={cn('wallet-picker', 'relative max-h-[80vh] w-[280px] max-w-full overflow-x-hidden overflow-y-auto')}
         onClick={(e) => e.stopPropagation()}
       >
-        <span className={cn('wallet-picker-scanlines', 'absolute inset-0 overflow-hidden pointer-events-none z-2')} />
+        <span className="absolute inset-0 overflow-hidden pointer-events-none z-2 save-dialog-crt" />
 
         <div className="relative z-1 flex flex-col gap-5 items-center py-9 px-6">
           <h2 className={cn('wallet-picker-title', 'text-[1.1em] tracking-[0.12em] uppercase m-0')}>

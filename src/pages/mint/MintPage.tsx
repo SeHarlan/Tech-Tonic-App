@@ -32,6 +32,29 @@ import { activeOwnedNftIdAtom, pendingMintLoadAtom } from '../../store/atoms';
 import { fetchPriorityFee } from '../../utils/das-api';
 import './mint-page.css';
 
+function SegmentedProgress({ minted, total }: { minted: number; total: number }) {
+  const segments = 20;
+  const filled = (minted / total) * segments;
+  return (
+    <div className="w-full flex gap-[3px]">
+      {Array.from({ length: segments }, (_, i) => {
+        const blockFill = Math.min(1, Math.max(0, filled - i));
+        return (
+          <div
+            key={i}
+            className="h-3 flex-1 border border-[rgba(0,255,128,0.2)] overflow-hidden"
+          >
+            <div
+              className="h-full bg-[rgba(0,255,128,0.55)]"
+              style={{ width: `${blockFill * 100}%` }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type MintStatus = 'idle' | 'minting' | 'success' | 'error';
 type PaymentMethod = 'sol' | 'skr';
 
@@ -306,15 +329,10 @@ export function MintPage() {
               )}
             </p>
 
-            {/* Progress bar */}
+            {/* Progress bar — segmented blocks */}
             {mintCount && (
-              <div className="w-full -mt-4">
-                <div className="h-1.5 w-full rounded-full border border-[rgba(0,255,128,0.2)] overflow-hidden">
-                  <div
-                    className="h-full bg-[rgba(0,255,128,0.6)] transition-all duration-500"
-                    style={{ width: `${(mintCount.minted / mintCount.total) * 100}%` }}
-                  />
-                </div>
+              <div className="-mt-4 w-full">
+                <SegmentedProgress minted={mintCount.minted} total={mintCount.total} />
               </div>
             )}
 
