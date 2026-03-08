@@ -22,6 +22,12 @@ export interface DraftData {
   paintBlob: Blob;
 }
 
+// --- IndexedDB warmup (web) / filesystem init (native) ---
+// Capacitor Filesystem on web uses IndexedDB, which needs an async init.
+// Fire a no-op stat() at module load so the DB is ready by the time drafts
+// are actually read/written. Safe on both web (IndexedDB) and Android (native FS).
+Filesystem.stat({ path: 'drafts', directory: Directory.Data }).catch(() => {});
+
 // --- Helpers ---
 
 function getDraftKey(nftId: string): string {

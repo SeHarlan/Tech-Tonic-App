@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
 import { NftBrowser, loadNftIntoEngine, loadNftIntoEngineAsync, loadSketchSeed } from './NftBrowser';
-import { XIcon, CaretLineLeft, CaretLineRight, ShuffleIcon, FloppyDiskIcon } from '@phosphor-icons/react';
+import { XIcon, CaretLineLeft, CaretLineRight, ShuffleIcon, FloppyDiskIcon, CircleNotchIcon } from '@phosphor-icons/react';
 import { SaveDialog } from './SaveDialog';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
@@ -37,6 +37,17 @@ export type SlidePhase = 'loading' | 'sliding' | null;
 
 /** First-load glitch should only fire once per page session. */
 let hasPlayedInitialGlitch = false;
+
+/** Cache of already-prefetched image URLs — survives re-renders, cleared on page reload. */
+const prefetchedUrls = new Set<string>();
+
+function prefetchImage(url: string) {
+  if (!url || prefetchedUrls.has(url)) return;
+  prefetchedUrls.add(url);
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = url;
+}
 
 interface CanvasOverlayProps {
   canvasBottom: number;
@@ -256,6 +267,29 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
   const [slideDir, setSlideDir] = useState<1 | -1>(1);
   const transitionLock = useRef(false);
 
+  // --- Image prefetching for adjacent carousel items ---
+  useEffect(() => {
+    if (browserItems.length <= 1) return;
+    const len = browserItems.length;
+    const prev = browserItems[(browseIndex - 1 + len) % len];
+    const next = browserItems[(browseIndex + 1) % len];
+    if (prev) prefetchImage(prev.thumbnailUrl);
+    if (next) prefetchImage(next.thumbnailUrl);
+  }, [browseIndex, browserItems]);
+
+  // --- Spinner for slow engine loads (>1s) ---
+  const [showSpinner, setShowSpinner] = useState(false);
+  const spinnerTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Clear spinner when loading phase ends or component unmounts
+  useEffect(() => {
+    if (slidePhase !== 'loading') {
+      clearTimeout(spinnerTimer.current);
+      setShowSpinner(false);
+    }
+    return () => clearTimeout(spinnerTimer.current);
+  }, [slidePhase]);
+
   // Notify parent of transition state changes for canvas transforms
   useEffect(() => {
     onTransitionChange?.({ src: transitionSrc, phase: slidePhase, dir: slideDir });
@@ -276,6 +310,10 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     setTransitionSrc(src);
     setSlideDir(dir);
     setSlidePhase('loading');
+
+    // Show spinner if load takes >1s
+    clearTimeout(spinnerTimer.current);
+    spinnerTimer.current = setTimeout(() => setShowSpinner(true), 1000);
 
     try {
       // 2-3. Load next NFT into engine (canvas hidden behind screenshot)
@@ -341,6 +379,17 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
             <CaretLineRight size={28} weight="bold" />
           </button>
         </>
+      )}
+
+      {/* Loading spinner — shown when engine load exceeds 1s */}
+      {showSpinner && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <CircleNotchIcon
+            size={32}
+            weight="bold"
+            className="text-[rgba(0,255,128,0.5)] animate-spin"
+          />
+        </div>
       )}
 
       {/* Touch prompt — centered, doesn't intercept clicks */}

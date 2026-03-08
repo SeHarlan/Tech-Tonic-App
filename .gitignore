@@ -12,9 +12,10 @@ dist
 dist-ssr
 *.local
 
-# Environment files
+# Environment files (.env has secrets; .env.production is safe to commit)
 .env
-.env.production
+.env.local
+.env.*.local
 
 # Editor directories and files
 .vscode/*

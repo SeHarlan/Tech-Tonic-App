@@ -7,4 +7,5 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), glsl(), nodePolyfills()],
+  server: { host: true },
 })

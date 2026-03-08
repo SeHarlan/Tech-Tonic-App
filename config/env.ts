@@ -1,6 +1,8 @@
 // Single source of truth for all env vars and shared constants.
 // Works in both Vite (import.meta.env) and Bun (aliases import.meta.env to process.env).
 
+import { Capacitor } from '@capacitor/core';
+
 export type SolanaCluster = 'devnet' | 'mainnet-beta';
 
 // --- Constants ---
@@ -83,5 +85,11 @@ export const MINT_START_TIME =
   import.meta.env.VITE_MINT_START_TIME || undefined;
 
 // Backend URL for NFT on-chain updates (Hono + Bun on Railway)
+// On native (Android emulator), localhost refers to the device itself —
+// swap to 10.0.2.2 so requests reach the host machine's dev server.
+const _updateApiUrl = import.meta.env.VITE_UPDATE_API_URL || '';
+
 export const UPDATE_API_URL =
-  import.meta.env.VITE_UPDATE_API_URL || '';
+  Capacitor.isNativePlatform() && _updateApiUrl.includes('localhost')
+    ? _updateApiUrl.replace('localhost', '10.0.2.2')
+    : _updateApiUrl;

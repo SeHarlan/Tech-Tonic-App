@@ -550,7 +550,7 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
     if (pauseBtn) {
       const icon = pauseBtn.querySelector('.icon');
       if (icon) {
-        icon.textContent = state.globalFreeze ? '▶' : '⏸\uFE0E';
+        icon.textContent = state.globalFreeze ? '▶\uFE0E' : '⏸\uFE0E';
       }
     }
 

@@ -117,7 +117,7 @@ export function MintPage() {
           const tokenPayment = unwrapOption(skrGroup.guards.tokenPayment);
           if (tokenPayment) {
             const decimals = 6; // SKR decimals
-            setPriceSkr(Number(tokenPayment.amount.basisPoints) / 10 ** decimals);
+            setPriceSkr(Number(tokenPayment.amount) / 10 ** decimals);
           }
         }
       } catch (err) {

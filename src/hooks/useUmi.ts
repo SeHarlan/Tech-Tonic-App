@@ -28,9 +28,13 @@ function createWalletSigner(
   const signTransaction = async (transaction: Transaction) => {
     const serialized = umi.transactions.serialize(transaction);
     const signed = await connectorSigner.signTransaction(serialized);
-    const signedBytes = signed instanceof Uint8Array
-      ? signed
-      : new Uint8Array(signed.buffer, signed.byteOffset, signed.byteLength);
+    let signedBytes: Uint8Array;
+    if (signed instanceof Uint8Array) {
+      signedBytes = signed;
+    } else {
+      const view = signed as ArrayBufferView;
+      signedBytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    }
     return umi.transactions.deserialize(signedBytes);
   };
 

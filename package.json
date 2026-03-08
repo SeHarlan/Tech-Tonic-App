@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "generate-thumbnails": "bun run scripts/generate-thumbnails.ts",
     "upload-assets": "bun run scripts/upload-assets.ts",
-    "create-candy-machine": "bun run scripts/create-candy-machine.ts"
+    "create-candy-machine": "bun run scripts/create-candy-machine.ts",
+    "android:dev": "LIVE_RELOAD=1 bunx cap sync android",
+    "android:build": "bun run build && bunx cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "^8.1.0",

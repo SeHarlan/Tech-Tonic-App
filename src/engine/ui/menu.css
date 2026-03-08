@@ -624,6 +624,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    /* Force monochrome text rendering — prevents colored emoji on mobile */
+    font-variant-emoji: text;
 }
 
 .menu-btn[data-action="eraseMovement"] .icon {
