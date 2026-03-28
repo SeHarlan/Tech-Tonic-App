@@ -30,6 +30,7 @@ dist-ssr
 
 # Candy Machine pipeline outputs
 generated/
+generated-demo/
 
 # Generated thumbnails (local only)
 public/thumbnails/
