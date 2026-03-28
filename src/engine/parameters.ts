@@ -105,7 +105,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const fxWithBlocking = weightedRandom<boolean>(
     [
       [true, 1],
-      [false, 4],
+      [false, 9],
     ],
     rng,
   );
@@ -115,9 +115,9 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     blockingScale = weightedRandom<number>(
       [
         [4, 1],
-        [8, 3],
-        [16, 6],
-        [32, 3],
+        [8, 5],
+        [16, 10],
+        [32, 5],
         [64, 1],
       ],
       rng,
@@ -127,10 +127,11 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
       [
         [8, 1],
         [16, 2],
-        [32, 4],
-        [64, 6],
-        [128, 4],
+        [32, 5],
+        [64, 10],
+        [128, 5],
         [256, 2],
+        [512, 1],
       ],
       rng,
     );
@@ -188,15 +189,16 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const shouldFallScale = getFallShapeScale(shouldFallThreshold, useFallBlob, fxWithBlocking, blockingScale);
 
   // Black noise parameters
-  const blackNoiseThreshold = weightedRandom<number>(
-    [
-      [0.45, 1],
-      [0.5, 4],
-      [0.55, 1],
-    ],
-    rng,
-  );
-
+  // const blackNoiseThreshold = weightedRandom<number>(
+  //   [
+  //     [0.45, 1],
+  //     [0.5, 6],
+  //     [0.55, 1],
+  //   ],
+  //   rng,
+  // );
+  const blackNoiseThreshold = 0.5
+  
   const blackNoiseBaseScale = [
     Math.floor(randomFloat(4, 10)),
     Math.floor(randomFloat(4, 10)),
@@ -278,6 +280,34 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     blockingScale,
   ).map((x) => x * 3) as [number, number];
 
+  // Domain warp: how much the noise boundaries swirl/fold
+  // Operates in normalized noise-space, so no blockingScale scaling needed
+  const domainWarpAmount = weightedRandom<number>(
+    [
+      [1.0, 1],
+      [2.0, 2],
+      [3.0, 3],
+      [4.0, 3],
+      [5.0, 2],
+      [6.0, 1],
+    ],
+    rng,
+  );
+
+  // Pattern overlay: geometric patterns mixed with noise (0=none, 1=radial, 2=diagonal, 3=ridged)
+  const patternMode = weightedRandom<number>(
+    [
+      [0, 3],
+      [1, 1],
+      [2, 1],
+      [3, 2],
+    ],
+    rng,
+  );
+
+  const patternStrength = randomFloat(0.25, .95);
+  const patternFreq = randomFloat(1.0, 4.0);
+
   return {
     seed: rngSeed,
     fxWithBlocking,
@@ -303,6 +333,10 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     extraFallShapeScale,
     extraMoveShapeThreshold,
     extraMoveShapeScale,
+    domainWarpAmount,
+    patternMode,
+    patternStrength,
+    patternFreq,
   };
 }
 

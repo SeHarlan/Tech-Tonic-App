@@ -22,10 +22,10 @@ const STRUCTURAL_TIME_MULT = 0.01;
 const MOVE_SPEED = 0.0045;
 const RESET_EDGE_THRESHOLD = 0.33;
 const RIBBON_DIRT_THRESHOLD = 0.9;
-const USE_RIBBON_THRESHOLD = 0.33;
-const USE_GRAYSCALE = false;
+const USE_RIBBON_THRESHOLD = 0.45;
 const BLANK_STATIC_THRESHOLD = 0.5;
 const BLANK_STATIC_TIME_MULT = 2.0;
+const USE_GRAYSCALE = false;
 const BLANK_COLOR: [number, number, number] = [0, 0, 0];
 const STATIC_COLOR_1: [number, number, number] = [1, 0, 0];
 const STATIC_COLOR_2: [number, number, number] = [0, 1, 0];
@@ -276,6 +276,10 @@ export function createEngine(config: EngineConfig): Engine {
     blackNoiseScale: gl.getUniformLocation(bnProg, 'u_blackNoiseScale'),
     structuralMoveTime: gl.getUniformLocation(bnProg, 'u_structuralMoveTime'),
     wrappingTime: gl.getUniformLocation(bnProg, 'u_wrappingTime'),
+    domainWarpAmount: gl.getUniformLocation(bnProg, 'u_domainWarpAmount'),
+    patternMode: gl.getUniformLocation(bnProg, 'u_patternMode'),
+    patternStrength: gl.getUniformLocation(bnProg, 'u_patternStrength'),
+    patternFreq: gl.getUniformLocation(bnProg, 'u_patternFreq'),
   };
 
   // --- Noise Volume Program ---
@@ -517,6 +521,10 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform2f(bnUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
     gl.uniform1f(bnUnif.structuralMoveTime, structuralMoveTime);
     gl.uniform1f(bnUnif.wrappingTime, wrappingTime);
+    gl.uniform1f(bnUnif.domainWarpAmount, params.domainWarpAmount);
+    gl.uniform1i(bnUnif.patternMode, params.patternMode);
+    gl.uniform1f(bnUnif.patternStrength, params.patternStrength);
+    gl.uniform1f(bnUnif.patternFreq, params.patternFreq);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.enableVertexAttribArray(bnAttr.position);

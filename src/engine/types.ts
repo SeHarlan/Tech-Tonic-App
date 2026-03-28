@@ -46,6 +46,10 @@ export interface ShaderParams {
   extraFallShapeScale: [number, number];
   extraMoveShapeThreshold: number;
   extraMoveShapeScale: [number, number];
+  domainWarpAmount: number;
+  patternMode: number;
+  patternStrength: number;
+  patternFreq: number;
 }
 
 // --- Drawing Types ---
