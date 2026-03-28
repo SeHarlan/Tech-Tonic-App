@@ -281,6 +281,8 @@ export function createEngine(config: EngineConfig): Engine {
     patternStrength: gl.getUniformLocation(bnProg, 'u_patternStrength'),
     patternFreq: gl.getUniformLocation(bnProg, 'u_patternFreq'),
     patternCenter: gl.getUniformLocation(bnProg, 'u_patternCenter'),
+    mirrorAmount: gl.getUniformLocation(bnProg, 'u_mirrorAmount'),
+    mirrorAxis: gl.getUniformLocation(bnProg, 'u_mirrorAxis'),
   };
 
   // --- Noise Volume Program ---
@@ -527,6 +529,8 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(bnUnif.patternStrength, params.patternStrength);
     gl.uniform1f(bnUnif.patternFreq, params.patternFreq);
     gl.uniform2f(bnUnif.patternCenter, params.patternCenter[0], params.patternCenter[1]);
+    gl.uniform1f(bnUnif.mirrorAmount, params.mirrorAmount);
+    gl.uniform1i(bnUnif.mirrorAxis, params.mirrorAxis);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.enableVertexAttribArray(bnAttr.position);

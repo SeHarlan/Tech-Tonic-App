@@ -51,6 +51,8 @@ export interface ShaderParams {
   patternStrength: number;
   patternFreq: number;
   patternCenter: [number, number];
+  mirrorAmount: number;
+  mirrorAxis: number;
 }
 
 // --- Drawing Types ---

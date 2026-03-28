@@ -15,6 +15,8 @@ uniform int u_patternMode;       // 0=none, 1=radial, 2=diagonal, 3=ridged
 uniform float u_patternStrength; // 0-1 blend with noise
 uniform float u_patternFreq;     // repetitions across canvas (1-4)
 uniform vec2 u_patternCenter;    // focal point for patterns (golden ratio positions)
+uniform float u_mirrorAmount;    // 0-1 strength of corner mirroring
+uniform int u_mirrorAxis;        // 0=TL↔BR, 1=TR↔BL
 
 in vec2 v_texCoord;
 out vec4 fragColor;
@@ -54,27 +56,36 @@ float structuralNoise(vec2 st, float t) {
 void main() {
     vec2 blockingSt = floor(v_texCoord * u_blocking);
 
-    // R: wrappingNoise (scaled down for wider variation) — unwarped
-    float wrappingNoise = structuralNoise(blockingSt * u_blackNoiseScale * 0.25 + 11.909, u_wrappingTime);
+    // Corner mirror: blend coordinates toward their 180°-rotated counterpart
+    // so ALL channels naturally mirror near opposite corners
+    if (u_mirrorAmount > 0.0) {
+      vec2 mirrorSt = vec2(u_blocking - 1.0) - blockingSt;
+      // Mask: distance from the closer of the two corners on the chosen diagonal
+      vec2 corner1 = u_mirrorAxis == 0 ? vec2(0.0, 0.0) : vec2(1.0, 0.0);
+      vec2 corner2 = 1.0 - corner1;
+      float nearCorner = min(length(v_texCoord - corner1), length(v_texCoord - corner2));
+      // Blend: full mirror in corners, fades to original toward center
+      float mask = smoothstep(1.5, 0.0, nearCorner) * u_mirrorAmount;
+      blockingSt = mix(blockingSt, mirrorSt, mask);
+    }
 
     // Normalized noise coordinates (consistent range ~0-10 regardless of blockingScale)
     vec2 noiseSt = blockingSt * u_blackNoiseScale;
 
+    // R: wrappingNoise (scaled down for wider variation)
+    float wrappingNoise = structuralNoise(noiseSt * 0.25 + 11.909, u_wrappingTime);
+
     // Pattern: compute a geometric bias that offsets noise coordinates
-    // This shapes the noise into circles/stripes/ridges with organic, warped edges
     vec2 patternOffset = vec2(0.0);
     if (u_patternMode > 0) {
       vec2 uv = v_texCoord - u_patternCenter;
       float pattern = 0.0;
 
       if (u_patternMode == 1) {
-        // Radial: smooth concentric ring zones
         pattern = sin(length(uv) * u_patternFreq * 6.2832) * 0.5 + 0.5;
       } else if (u_patternMode == 2) {
-        // Diagonal: smooth angled stripe zones
         pattern = sin((uv.x + uv.y) * u_patternFreq * 6.2832) * 0.5 + 0.5;
       } else if (u_patternMode == 3) {
-        // Ridged: use a quick noise sample to create vein-like coordinate distortion
         float ridgeNoise = structuralNoise(noiseSt * 0.8 + 333., u_structuralMoveTime);
         pattern = 1.0 - abs(2.0 * ridgeNoise - 1.0);
       }
@@ -82,11 +93,10 @@ void main() {
       patternOffset = vec2(pattern) * u_patternStrength;
     }
 
-    // Domain warp: operate in noise-space so effect is consistent across all blockingScales
+    // Domain warp
     float warp = structuralNoise(noiseSt * .5 + 500., u_structuralMoveTime);
     vec2 warpOffset = vec2(warp) * u_domainWarpAmount;
 
-    // Combined offset: pattern shapes the large structure, warp adds organic edges
     vec2 totalOffset = warpOffset + patternOffset;
 
     // G: blackNoise
@@ -94,10 +104,9 @@ void main() {
     // B: ribbonNoise
     float ribbonNoise = structuralNoise(noiseSt + totalOffset - 2000., u_structuralMoveTime);
 
-    // Balanced fill: compress noise range toward 0.5 so no seed ends up all-black or all-colored
-    // Maps [0,1] → [0.15, 0.85], guaranteeing both sides of any threshold get representation
-    blackNoise = 0.25 + blackNoise * 0.5;
-    ribbonNoise = 0.25 + ribbonNoise * 0.5;
+    // Balanced fill: compress toward 0.5 and clamp to guarantee mix
+    blackNoise = clamp(0.3 + blackNoise * 0.4, 0.3, 0.7);
+    ribbonNoise = clamp(0.3 + ribbonNoise * 0.4, 0.3, 0.7);
 
     fragColor = vec4(wrappingNoise, blackNoise, ribbonNoise, 1.0);
 }
