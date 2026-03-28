@@ -206,6 +206,7 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
     },
 
     // Passthrough actions — state doesn't change, consumer handles them
+    newSeed() {},
     saveScreenshot() {},
     recordVideo() {
       // Sync button visual when triggered via keyboard ('R')
@@ -249,6 +250,9 @@ export function setupMenu(opts?: MenuOptions): MenuController | null {
         return;
       case 'r':
         dispatch('recordVideo');
+        return;
+      case 'n':
+        dispatch('newSeed');
         return;
       case 'q':
         dispatch('openAppMenu');

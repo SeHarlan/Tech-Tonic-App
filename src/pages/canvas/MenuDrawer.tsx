@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useImperativeHandle, useRef, forwardRef } from 'react';
 import type { Engine } from '../../engine/renderer';
 import type { EraseVariant } from '../../engine/types';
+import { SEED_MODULUS } from '../../engine/parameters';
 import { setupMenu } from '../../engine/ui/menu';
 import '../../engine/ui/menu.css';
 import menuHtml from '../../engine/ui/menu.html?raw';
@@ -95,6 +96,9 @@ function dispatchToEngine(
       break;
     case 'globalReset':
       engine.forceReset();
+      break;
+    case 'newSeed':
+      engine.setSeed(Math.floor(Math.random() * SEED_MODULUS));
       break;
     // Keyboard-only actions
     case 'cycleEraseMode':
