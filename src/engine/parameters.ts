@@ -289,15 +289,16 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
       [3.0, 3],
       [4.0, 3],
       [5.0, 2],
-      [6.0, 1],
+      [6.0, 100],
     ],
     rng,
   );
+  
 
   // Pattern overlay: geometric patterns mixed with noise (0=none, 1=radial, 2=diagonal, 3=ridged)
   const patternMode = weightedRandom<number>(
     [
-      [0, 3],
+      // [0, 3],
       [1, 1],
       [2, 1],
       [3, 2],
@@ -307,6 +308,15 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   const patternStrength = randomFloat(0.25, .95);
   const patternFreq = randomFloat(1.0, 4.0);
+
+  // Golden ratio focal points for pattern origin
+  const goldenPoints: [number, number][] = [
+    [0.382, 0.382],
+    [0.618, 0.382],
+    [0.382, 0.618],
+    [0.618, 0.618],
+  ];
+  const patternCenter = goldenPoints[Math.floor(rng() * goldenPoints.length)];
 
   return {
     seed: rngSeed,
@@ -337,6 +347,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     patternMode,
     patternStrength,
     patternFreq,
+    patternCenter,
   };
 }
 

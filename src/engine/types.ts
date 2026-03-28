@@ -50,6 +50,7 @@ export interface ShaderParams {
   patternMode: number;
   patternStrength: number;
   patternFreq: number;
+  patternCenter: [number, number];
 }
 
 // --- Drawing Types ---

@@ -14,6 +14,7 @@ uniform float u_domainWarpAmount;
 uniform int u_patternMode;       // 0=none, 1=radial, 2=diagonal, 3=ridged
 uniform float u_patternStrength; // 0-1 blend with noise
 uniform float u_patternFreq;     // repetitions across canvas (1-4)
+uniform vec2 u_patternCenter;    // focal point for patterns (golden ratio positions)
 
 in vec2 v_texCoord;
 out vec4 fragColor;
@@ -63,7 +64,7 @@ void main() {
     // This shapes the noise into circles/stripes/ridges with organic, warped edges
     vec2 patternOffset = vec2(0.0);
     if (u_patternMode > 0) {
-      vec2 uv = v_texCoord - 0.5;
+      vec2 uv = v_texCoord - u_patternCenter;
       float pattern = 0.0;
 
       if (u_patternMode == 1) {
@@ -92,6 +93,11 @@ void main() {
     float blackNoise = structuralNoise(noiseSt + totalOffset + 1000., u_structuralMoveTime);
     // B: ribbonNoise
     float ribbonNoise = structuralNoise(noiseSt + totalOffset - 2000., u_structuralMoveTime);
+
+    // Balanced fill: compress noise range toward 0.5 so no seed ends up all-black or all-colored
+    // Maps [0,1] → [0.15, 0.85], guaranteeing both sides of any threshold get representation
+    blackNoise = 0.25 + blackNoise * 0.5;
+    ribbonNoise = 0.25 + ribbonNoise * 0.5;
 
     fragColor = vec4(wrappingNoise, blackNoise, ribbonNoise, 1.0);
 }
