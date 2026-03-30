@@ -10,6 +10,7 @@
         "@capacitor/filesystem": "^8.1.2",
         "@fontsource/rajdhani": "^5.2.7",
         "@fontsource/share-tech-mono": "^5.2.7",
+        "@mediapipe/tasks-vision": "^0.10.34",
         "@metaplex-foundation/mpl-candy-machine": "^6.1.0",
         "@metaplex-foundation/mpl-core": "^1.7.0",
         "@metaplex-foundation/mpl-core-candy-machine": "^0.3.0",
@@ -389,6 +390,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@mediapipe/tasks-vision": ["@mediapipe/tasks-vision@0.10.34", "", {}, "sha512-KFGyhDsjJ+9WUMcMfjTOpcEp3LJNS3KwC7BfvKrCYELn/7G/5kmwnU7z6Spps+iWQoTGL8xW8i68r65OTa3DwA=="],
 
     "@metaplex-foundation/mpl-candy-machine": ["@metaplex-foundation/mpl-candy-machine@6.1.0", "", { "dependencies": { "@metaplex-foundation/mpl-token-metadata": "3.0.0-alpha.27", "@metaplex-foundation/mpl-toolbox": "0.10.0", "@noble/hashes": "^1.2.0", "merkletreejs": "^0.3.9" }, "peerDependencies": { "@metaplex-foundation/umi": ">= 0.8.2 <= 1" } }, "sha512-Y58wVkK9kU3ur22xnmYG/IOzJfo450dlUMl8FSuSRThV82IJte11ggtw5fEWIQQO/jhLWsjlkRHn4vd5RGmeGg=="],
 
