@@ -10,10 +10,10 @@ export interface HandTrackingState {
   clientPosition: { x: number; y: number };
   /** Engine coordinates (1080x1920, Y-flipped) for handlePointerDown/Move/Up */
   canvasPosition: { x: number; y: number };
-  /** true when hand is fully open (all fingers extended) */
+  /** true when right hand thumb+index are pinched together */
   isDrawing: boolean;
-  /** Brush size derived from thumb-index pinch distance, mapped to brushRange */
-  brushSize: number;
+  /** Brush size from left hand pinch spread, or null if left hand not detected */
+  brushSize: number | null;
 }
 
 const DEFAULT_STATE: HandTrackingState = {
@@ -21,7 +21,7 @@ const DEFAULT_STATE: HandTrackingState = {
   clientPosition: { x: 0, y: 0 },
   canvasPosition: { x: 0, y: 0 },
   isDrawing: false,
-  brushSize: 16,
+  brushSize: null,
 };
 
 // MediaPipe model hosted on Google's CDN — downloaded at runtime only when enabled
@@ -33,26 +33,21 @@ const WASM_URL =
 // Landmark indices
 const WRIST = 0;
 const THUMB_TIP = 4;
-const INDEX_MCP = 5;
-const INDEX_PIP = 6;
 const INDEX_TIP = 8;
 const MIDDLE_MCP = 9;
-const MIDDLE_PIP = 10;
-const MIDDLE_TIP = 12;
-const RING_PIP = 14;
-const RING_TIP = 16;
-const PINKY_PIP = 18;
-const PINKY_TIP = 20;
 
 // Hysteresis: frames a gesture must hold before toggling draw state
 const DRAW_HYSTERESIS_FRAMES = 3;
 
-// Exponential moving average factor for brush size smoothing (0-1, lower = smoother)
-const BRUSH_SMOOTH_FACTOR = 0.3;
+// Right hand: pinch threshold for drawing
+const PINCH_THRESHOLD = 0.35;
 
-// Pinch distance range (normalized to hand scale) mapped to brush size
-const PINCH_MIN = 0.15; // thumb-index touching
-const PINCH_MAX = 0.9;  // thumb-index fully spread
+// Left hand: pinch range for brush size mapping
+const BRUSH_PINCH_MIN = 0.15;
+const BRUSH_PINCH_MAX = 0.9;
+
+// Heavy EMA smoothing for brush size (lower = smoother, 0.1 = very smooth)
+const BRUSH_SMOOTH_FACTOR = 0.1;
 
 // --- Gesture Helpers ---
 
@@ -60,37 +55,6 @@ interface NormalizedLandmark {
   x: number;
   y: number;
   z: number;
-}
-
-function isFingerExtended(
-  tip: NormalizedLandmark,
-  pip: NormalizedLandmark,
-): boolean {
-  // In MediaPipe's coordinate system, y increases downward.
-  // A finger is extended when its tip is above (lower y) the PIP joint.
-  return tip.y < pip.y;
-}
-
-function isThumbExtended(
-  thumbTip: NormalizedLandmark,
-  indexMcp: NormalizedLandmark,
-  wrist: NormalizedLandmark,
-): boolean {
-  // Thumb extends laterally — check if thumb tip is farther from wrist
-  // than the index MCP along the x-axis
-  const thumbDist = Math.abs(thumbTip.x - wrist.x);
-  const indexDist = Math.abs(indexMcp.x - wrist.x);
-  return thumbDist > indexDist;
-}
-
-function isHandOpen(landmarks: NormalizedLandmark[]): boolean {
-  return (
-    isThumbExtended(landmarks[THUMB_TIP], landmarks[INDEX_MCP], landmarks[WRIST]) &&
-    isFingerExtended(landmarks[INDEX_TIP], landmarks[INDEX_PIP]) &&
-    isFingerExtended(landmarks[MIDDLE_TIP], landmarks[MIDDLE_PIP]) &&
-    isFingerExtended(landmarks[RING_TIP], landmarks[RING_PIP]) &&
-    isFingerExtended(landmarks[PINKY_TIP], landmarks[PINKY_PIP])
-  );
 }
 
 function euclideanDist(a: NormalizedLandmark, b: NormalizedLandmark): number {
@@ -104,12 +68,16 @@ function getPinchRatio(landmarks: NormalizedLandmark[]): number {
   return pinchDist / handScale;
 }
 
+function isPinching(landmarks: NormalizedLandmark[]): boolean {
+  return getPinchRatio(landmarks) < PINCH_THRESHOLD;
+}
+
 function mapPinchToBrushSize(
   ratio: number,
   minBrush: number,
   maxBrush: number,
 ): number {
-  const t = Math.max(0, Math.min(1, (ratio - PINCH_MIN) / (PINCH_MAX - PINCH_MIN)));
+  const t = Math.max(0, Math.min(1, (ratio - BRUSH_PINCH_MIN) / (BRUSH_PINCH_MAX - BRUSH_PINCH_MIN)));
   return minBrush + t * (maxBrush - minBrush);
 }
 
@@ -128,15 +96,14 @@ export function useHandTracking(
   const rafIdRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Hysteresis counter for draw state
+  // Right hand: hysteresis counter for draw state
   const drawCounterRef = useRef(0);
   const lastDrawStateRef = useRef(false);
 
-  // Smoothed brush size
-  const smoothBrushRef = useRef(16);
+  // Left hand: smoothed brush size
+  const smoothBrushRef = useRef<number | null>(null);
 
-  // Keep brush range in a ref so the rAF loop always reads the latest value
-  // without needing to restart the effect
+  // Keep brush range in a ref so the rAF loop reads the latest value
   const brushRangeRef = useRef(brushRange);
   brushRangeRef.current = brushRange;
 
@@ -159,11 +126,11 @@ export function useHandTracking(
     }
     drawCounterRef.current = 0;
     lastDrawStateRef.current = false;
+    smoothBrushRef.current = null;
     setState(DEFAULT_STATE);
   }, []);
 
   useEffect(() => {
-    console.log('[HandTracking] effect fired, enabled:', enabled);
     if (!enabled) {
       cleanup();
       return;
@@ -172,7 +139,6 @@ export function useHandTracking(
     let cancelled = false;
 
     async function init() {
-      console.log('[HandTracking] init() starting');
       // Create hidden video element
       const video = document.createElement('video');
       video.setAttribute('playsinline', '');
@@ -200,13 +166,11 @@ export function useHandTracking(
         stream.getTracks().forEach((t) => t.stop());
         return;
       }
-      console.log('[HandTracking] got webcam stream');
       streamRef.current = stream;
       video.srcObject = stream;
 
       try {
         await video.play();
-        console.log('[HandTracking] video playing');
 
         // Load MediaPipe
         const vision = await FilesetResolver.forVisionTasks(WASM_URL);
@@ -214,7 +178,7 @@ export function useHandTracking(
 
         const handLandmarker = await HandLandmarker.createFromOptions(vision, {
           baseOptions: { modelAssetPath: MODEL_URL },
-          numHands: 1,
+          numHands: 2,
           runningMode: 'VIDEO',
           minHandDetectionConfidence: 0.5,
           minHandPresenceConfidence: 0.5,
@@ -225,16 +189,13 @@ export function useHandTracking(
           return;
         }
         handLandmarkerRef.current = handLandmarker;
-        console.log('[HandTracking] MediaPipe ready, starting detection');
-      } catch (err) {
-        console.warn('[HandTracking] Failed to initialize MediaPipe', err);
+      } catch {
         console.warn('[HandTracking] Failed to initialize MediaPipe');
         cleanup();
         return;
       }
 
       // Start detection loop
-      let detectFrameCount = 0;
       function detect() {
         if (cancelled) return;
         rafIdRef.current = requestAnimationFrame(detect);
@@ -243,34 +204,26 @@ export function useHandTracking(
         if (!canvas || !videoRef.current || !handLandmarkerRef.current) return;
         if (videoRef.current.readyState < 2) return; // not enough data
 
-        detectFrameCount++;
-        if (detectFrameCount % 60 === 1) {
-          console.log('[HandTracking] detect frame', detectFrameCount, 'video readyState:', videoRef.current.readyState);
-        }
-
         const result = handLandmarkerRef.current.detectForVideo(
           videoRef.current,
           performance.now(),
         );
 
-        // Find the right hand
+        // Find right and left hands
         let rightHandIndex = -1;
+        let leftHandIndex = -1;
         if (result.handedness) {
           for (let i = 0; i < result.handedness.length; i++) {
             const cats = result.handedness[i];
-            if (cats && cats.length > 0 && cats[0].categoryName === 'Right') {
-              rightHandIndex = i;
-              break;
-            }
+            if (!cats || cats.length === 0) continue;
+            if (cats[0].categoryName === 'Right') rightHandIndex = i;
+            else if (cats[0].categoryName === 'Left') leftHandIndex = i;
           }
         }
 
-        if (detectFrameCount % 60 === 1) {
-          console.log('[HandTracking] hands found:', result.landmarks.length, 'handedness:', result.handedness?.map(h => h[0]?.categoryName));
-        }
+        // --- Right hand: position + drawing ---
 
         if (rightHandIndex === -1 || !result.landmarks[rightHandIndex]) {
-          // No right hand detected
           if (lastDrawStateRef.current) {
             drawCounterRef.current = 0;
             lastDrawStateRef.current = false;
@@ -283,46 +236,66 @@ export function useHandTracking(
           return;
         }
 
-        const landmarks = result.landmarks[rightHandIndex];
-        const rect = canvas.getBoundingClientRect();
+        const rightLandmarks = result.landmarks[rightHandIndex];
 
         // Position: palm center (landmark 9), mirrored X
-        const palm = landmarks[MIDDLE_MCP];
-        const clientX = rect.left + (1 - palm.x) * rect.width;
-        const clientY = rect.top + palm.y * rect.height;
+        // Map to full viewport like a mouse cursor
+        const palm = rightLandmarks[MIDDLE_MCP];
+        const clientX = (1 - palm.x) * window.innerWidth;
+        const clientY = palm.y * window.innerHeight;
 
-        // Engine coords (1080x1920, Y-flipped from DOM)
-        const canvasX = (1 - palm.x) * canvas.width;
-        const canvasY = (1 - palm.y) * canvas.height;
+        // Engine coords: convert client position to canvas space
+        const rect = canvas.getBoundingClientRect();
+        const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
+        const canvasY = canvas.height - (clientY - rect.top) * (canvas.height / rect.height);
 
-        // Draw state with hysteresis
-        const rawOpen = isHandOpen(landmarks);
-        if (rawOpen !== lastDrawStateRef.current) {
+        // Draw state: pinch = drawing, with hysteresis
+        const rawPinch = isPinching(rightLandmarks);
+        if (rawPinch !== lastDrawStateRef.current) {
           drawCounterRef.current++;
           if (drawCounterRef.current >= DRAW_HYSTERESIS_FRAMES) {
-            lastDrawStateRef.current = rawOpen;
+            lastDrawStateRef.current = rawPinch;
             drawCounterRef.current = 0;
           }
         } else {
           drawCounterRef.current = 0;
         }
 
-        // Brush size from pinch, mapped to engine's brush range
-        const pinchRatio = getPinchRatio(landmarks);
-        const { min, max } = brushRangeRef.current;
-        const rawBrush = mapPinchToBrushSize(pinchRatio, min, max);
-        smoothBrushRef.current =
-          smoothBrushRef.current * (1 - BRUSH_SMOOTH_FACTOR) +
-          rawBrush * BRUSH_SMOOTH_FACTOR;
+        // --- Left hand: brush size ---
 
-        const roundedBrush = Math.round(smoothBrushRef.current);
+        let brushSize: number | null = null;
+        if (leftHandIndex !== -1 && result.landmarks[leftHandIndex]) {
+          const leftLandmarks = result.landmarks[leftHandIndex];
+          const pinchRatio = getPinchRatio(leftLandmarks);
+          const { min, max } = brushRangeRef.current;
+          const rawBrush = mapPinchToBrushSize(pinchRatio, min, max);
+
+          // Heavy EMA smoothing — initialize on first detection
+          if (smoothBrushRef.current === null) {
+            smoothBrushRef.current = rawBrush;
+          } else {
+            smoothBrushRef.current =
+              smoothBrushRef.current * (1 - BRUSH_SMOOTH_FACTOR) +
+              rawBrush * BRUSH_SMOOTH_FACTOR;
+          }
+          brushSize = Math.round(smoothBrushRef.current);
+        } else {
+          // Left hand gone — keep last known brush size (don't reset to null)
+          // so brush doesn't jump when left hand briefly drops out
+          if (smoothBrushRef.current !== null) {
+            brushSize = Math.round(smoothBrushRef.current);
+          }
+        }
+
+        // --- Update state ---
+
         const drawState = lastDrawStateRef.current;
 
         setState((prev) => {
           if (
             prev.isActive &&
             prev.isDrawing === drawState &&
-            prev.brushSize === roundedBrush &&
+            prev.brushSize === brushSize &&
             Math.abs(prev.clientPosition.x - clientX) < 0.5 &&
             Math.abs(prev.clientPosition.y - clientY) < 0.5
           ) {
@@ -333,7 +306,7 @@ export function useHandTracking(
             clientPosition: { x: clientX, y: clientY },
             canvasPosition: { x: canvasX, y: canvasY },
             isDrawing: drawState,
-            brushSize: roundedBrush,
+            brushSize,
           };
         });
       }

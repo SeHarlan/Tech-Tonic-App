@@ -291,13 +291,11 @@ export function CanvasPage() {
 
   // Toggle hand tracking with 'h' key (browser only)
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Capacitor' in window) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).Capacitor?.isNativePlatform?.()) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'h' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        setHandTrackingEnabled((prev) => {
-          console.log('[HandTracking] toggle:', !prev);
-          return !prev;
-        });
+        setHandTrackingEnabled((prev) => !prev);
       }
     }
     window.addEventListener('keydown', onKeyDown);
@@ -317,8 +315,10 @@ export function CanvasPage() {
 
     const { canvasPosition, isDrawing, brushSize } = handTracking;
 
-    // Update brush size
-    engine.getDrawingManager().setBrushSize(brushSize);
+    // Update brush size from left hand (if detected)
+    if (brushSize !== null) {
+      engine.getDrawingManager().setBrushSize(brushSize);
+    }
 
     // Draw state transitions
     if (isDrawing && !prevHandDrawing.current) {
@@ -357,6 +357,18 @@ export function CanvasPage() {
 
   function onPointerUp() {
     engine?.handlePointerUp();
+  }
+
+  function onWheel(e: React.WheelEvent<HTMLCanvasElement>) {
+    if (!engine) return;
+    e.preventDefault();
+    const dm = engine.getDrawingManager();
+    if (e.deltaY < 0) {
+      dm.increaseBrushSize();
+    } else {
+      dm.decreaseBrushSize();
+    }
+    brushOverlayRef.current?.refresh();
   }
 
   return (
@@ -409,6 +421,7 @@ export function CanvasPage() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
+        onWheel={onWheel}
       />
       <BrushOverlay ref={brushOverlayRef} engine={engine} canvasRef={canvasRef} hidden={isOverlayOpen} />
       <div className={cn(
