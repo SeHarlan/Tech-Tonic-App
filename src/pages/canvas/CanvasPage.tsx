@@ -363,11 +363,14 @@ export function CanvasPage() {
     if (!engine) return;
     e.preventDefault();
     const dm = engine.getDrawingManager();
-    if (e.deltaY < 0) {
-      dm.increaseBrushSize();
-    } else {
-      dm.decreaseBrushSize();
-    }
+    const opts = dm.getBrushSizeOptions();
+    const min = opts[0] ?? 1;
+    const max = opts[opts.length - 1] ?? 64;
+    const range = max - min;
+    const step = range * 0.04; // 4% of range per scroll tick
+    const current = dm.getBrushSize();
+    const next = Math.max(min, Math.min(max, current + (e.deltaY < 0 ? step : -step)));
+    dm.setBrushSize(next);
     brushOverlayRef.current?.refresh();
   }
 

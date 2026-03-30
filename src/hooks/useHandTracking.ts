@@ -39,15 +39,18 @@ const MIDDLE_MCP = 9;
 // Hysteresis: frames a gesture must hold before toggling draw state
 const DRAW_HYSTERESIS_FRAMES = 3;
 
-// Right hand: pinch threshold for drawing
-const PINCH_THRESHOLD = 0.35;
+// Right hand: pinch thresholds with hysteresis band
+// Must pinch below PINCH_ON to start drawing, must release above PINCH_OFF to stop
+const PINCH_ON = 0.2;
+const PINCH_OFF = 0.35;
 
 // Left hand: pinch range for brush size mapping
 const BRUSH_PINCH_MIN = 0.15;
 const BRUSH_PINCH_MAX = 0.9;
 
-// Heavy EMA smoothing for brush size (lower = smoother, 0.1 = very smooth)
-const BRUSH_SMOOTH_FACTOR = 0.1;
+// EMA smoothing factors (lower = smoother)
+const POSITION_SMOOTH_FACTOR = 0.6;
+const BRUSH_SMOOTH_FACTOR = 0.15;
 
 // --- Gesture Helpers ---
 
@@ -68,8 +71,10 @@ function getPinchRatio(landmarks: NormalizedLandmark[]): number {
   return pinchDist / handScale;
 }
 
-function isPinching(landmarks: NormalizedLandmark[]): boolean {
-  return getPinchRatio(landmarks) < PINCH_THRESHOLD;
+function isPinching(landmarks: NormalizedLandmark[], wasDrawing: boolean): boolean {
+  const ratio = getPinchRatio(landmarks);
+  // Hysteresis: harder to start drawing than to stop
+  return wasDrawing ? ratio < PINCH_OFF : ratio < PINCH_ON;
 }
 
 function mapPinchToBrushSize(
@@ -100,6 +105,10 @@ export function useHandTracking(
   const drawCounterRef = useRef(0);
   const lastDrawStateRef = useRef(false);
 
+  // Smoothed position (client coords)
+  const smoothXRef = useRef<number | null>(null);
+  const smoothYRef = useRef<number | null>(null);
+
   // Left hand: smoothed brush size
   const smoothBrushRef = useRef<number | null>(null);
 
@@ -126,6 +135,8 @@ export function useHandTracking(
     }
     drawCounterRef.current = 0;
     lastDrawStateRef.current = false;
+    smoothXRef.current = null;
+    smoothYRef.current = null;
     smoothBrushRef.current = null;
     setState(DEFAULT_STATE);
   }, []);
@@ -209,10 +220,11 @@ export function useHandTracking(
           performance.now(),
         );
 
-        // Find right and left hands
+        // Find right and left hands using handedness labels
+        // Right hand = cursor + draw, Left hand = brush size only
         let rightHandIndex = -1;
         let leftHandIndex = -1;
-        if (result.handedness) {
+        if (result.landmarks.length >= 1 && result.handedness) {
           for (let i = 0; i < result.handedness.length; i++) {
             const cats = result.handedness[i];
             if (!cats || cats.length === 0) continue;
@@ -224,6 +236,9 @@ export function useHandTracking(
         // --- Right hand: position + drawing ---
 
         if (rightHandIndex === -1 || !result.landmarks[rightHandIndex]) {
+          // Reset position smoothing so re-entry starts fresh
+          smoothXRef.current = null;
+          smoothYRef.current = null;
           if (lastDrawStateRef.current) {
             drawCounterRef.current = 0;
             lastDrawStateRef.current = false;
@@ -241,16 +256,27 @@ export function useHandTracking(
         // Position: palm center (landmark 9), mirrored X
         // Map to full viewport like a mouse cursor
         const palm = rightLandmarks[MIDDLE_MCP];
-        const clientX = (1 - palm.x) * window.innerWidth;
-        const clientY = palm.y * window.innerHeight;
+        const rawX = (1 - palm.x) * window.innerWidth;
+        const rawY = palm.y * window.innerHeight;
+
+        // Smooth position with EMA — initialize on first detection
+        if (smoothXRef.current === null) {
+          smoothXRef.current = rawX;
+          smoothYRef.current = rawY;
+        } else {
+          smoothXRef.current = smoothXRef.current * (1 - POSITION_SMOOTH_FACTOR) + rawX * POSITION_SMOOTH_FACTOR;
+          smoothYRef.current = smoothYRef.current! * (1 - POSITION_SMOOTH_FACTOR) + rawY * POSITION_SMOOTH_FACTOR;
+        }
+        const clientX = smoothXRef.current;
+        const clientY = smoothYRef.current!;
 
         // Engine coords: convert client position to canvas space
         const rect = canvas.getBoundingClientRect();
         const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
         const canvasY = canvas.height - (clientY - rect.top) * (canvas.height / rect.height);
 
-        // Draw state: pinch = drawing, with hysteresis
-        const rawPinch = isPinching(rightLandmarks);
+        // Draw state: pinch = drawing, with hysteresis band + frame hysteresis
+        const rawPinch = isPinching(rightLandmarks, lastDrawStateRef.current);
         if (rawPinch !== lastDrawStateRef.current) {
           drawCounterRef.current++;
           if (drawCounterRef.current >= DRAW_HYSTERESIS_FRAMES) {
