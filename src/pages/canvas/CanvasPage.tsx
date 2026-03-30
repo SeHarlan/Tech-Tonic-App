@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { FloppyDiskIcon } from '@phosphor-icons/react';
 import { createEngine, type Engine } from '../../engine/renderer';
@@ -6,6 +6,7 @@ import { cn } from '../../utils/ui-helpers';
 import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
 import { CanvasOverlay, type SlidePhase } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
+import { useHandTracking } from '../../hooks/useHandTracking';
 import { useAutoDraft } from '../../hooks/useAutoDraft';
 import { sketchSeedAtom, pendingMintLoadAtom, overlayTabAtom } from '../../store/atoms';
 import './canvas-overlay.css';
@@ -14,6 +15,7 @@ import './canvas-overlay.css';
 
 interface BrushOverlayHandle {
   refresh(): void;
+  updateFromHandTracking(clientX: number, clientY: number): void;
 }
 
 interface BrushOverlayProps {
@@ -130,7 +132,12 @@ const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function 
     }
   }, [updatePosition, canvasRef, hide]);
 
-  useImperativeHandle(ref, () => ({ refresh }), [refresh]);
+  useImperativeHandle(ref, () => ({
+    refresh,
+    updateFromHandTracking(clientX: number, clientY: number) {
+      updatePosition(clientX, clientY);
+    },
+  }), [refresh, updatePosition]);
 
   useEffect(() => { if (hidden) hide(); }, [hidden, hide]);
 
@@ -181,6 +188,8 @@ export function CanvasPage() {
   const { isSaving, saveNow } = useAutoDraft(engine);
   const isInitialRender = useRef(true);
   const needsInitialLoad = useRef(true);
+  const [handTrackingEnabled, setHandTrackingEnabled] = useState(false);
+  const prevHandDrawing = useRef(false);
 
   const [canvasBottom, setCanvasBottom] = useState(0);
 
@@ -201,6 +210,13 @@ export function CanvasPage() {
       setCanvasBottom(window.innerHeight / 2 + (h * 0.8) / 2);
     }
   }, []);
+
+  // Hand tracking (browser only)
+  const brushRange = useMemo(() => {
+    const opts = engine?.getDrawingManager().getBrushSizeOptions() ?? [];
+    return { min: opts[0] ?? 1, max: opts[opts.length - 1] ?? 64 };
+  }, [engine]);
+  const handTracking = useHandTracking(canvasRef, handTrackingEnabled, brushRange);
 
   // Create engine and open overlay on mount (or when seed changes)
   useEffect(() => {
@@ -272,6 +288,54 @@ export function CanvasPage() {
     },
     [engine, closeOverlay],
   );
+
+  // Toggle hand tracking with 'h' key (browser only)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Capacitor' in window) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'h' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        setHandTrackingEnabled((prev) => !prev);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Drive engine from hand tracking
+  useEffect(() => {
+    if (!engine || !handTracking.isActive) {
+      // If hand tracking was drawing and goes inactive, release
+      if (prevHandDrawing.current) {
+        engine?.handlePointerUp();
+        prevHandDrawing.current = false;
+      }
+      return;
+    }
+
+    const { canvasPosition, isDrawing, brushSize } = handTracking;
+
+    // Update brush size
+    engine.getDrawingManager().setBrushSize(brushSize);
+
+    // Draw state transitions
+    if (isDrawing && !prevHandDrawing.current) {
+      engine.handlePointerDown(canvasPosition.x, canvasPosition.y);
+    } else if (isDrawing && prevHandDrawing.current) {
+      engine.handlePointerMove(canvasPosition.x, canvasPosition.y);
+    } else if (!isDrawing && prevHandDrawing.current) {
+      engine.handlePointerUp();
+    }
+    prevHandDrawing.current = isDrawing;
+  }, [engine, handTracking]);
+
+  // Update brush overlay from hand tracking
+  useEffect(() => {
+    if (!handTracking.isActive) return;
+    brushOverlayRef.current?.updateFromHandTracking(
+      handTracking.clientPosition.x,
+      handTracking.clientPosition.y,
+    );
+  }, [handTracking.clientPosition.x, handTracking.clientPosition.y, handTracking.isActive]);
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
