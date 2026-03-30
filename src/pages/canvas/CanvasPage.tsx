@@ -294,7 +294,10 @@ export function CanvasPage() {
     if (typeof window !== 'undefined' && 'Capacitor' in window) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'h' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        setHandTrackingEnabled((prev) => !prev);
+        setHandTrackingEnabled((prev) => {
+          console.log('[HandTracking] toggle:', !prev);
+          return !prev;
+        });
       }
     }
     window.addEventListener('keydown', onKeyDown);
