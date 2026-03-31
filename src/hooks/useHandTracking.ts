@@ -12,7 +12,7 @@ export interface HandTrackingState {
   canvasPosition: { x: number; y: number };
   /** true when right hand thumb+index are pinched together */
   isDrawing: boolean;
-  /** Brush size from left hand pinch spread, or null if left hand not detected */
+  /** Brush size from left hand pinch spread (palm-facing only), or null if not set */
   brushSize: number | null;
 }
 
@@ -27,30 +27,82 @@ const DEFAULT_STATE: HandTrackingState = {
 // MediaPipe model hosted on Google's CDN — downloaded at runtime only when enabled
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
-const WASM_URL =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
 
 // Landmark indices
 const WRIST = 0;
 const THUMB_TIP = 4;
 const INDEX_TIP = 8;
+const INDEX_MCP = 5;
 const MIDDLE_MCP = 9;
+const PINKY_MCP = 17;
 
-// Hysteresis: frames a gesture must hold before toggling draw state
-const DRAW_HYSTERESIS_FRAMES = 3;
+// Right hand: two-gesture draw control
+// Pinch (ratio < PINCH_CLOSED) starts drawing; wide spread (ratio > SPREAD_OFF) stops it.
+// Large dead zone between them means normal drawing motion can't trigger either state.
+const PINCH_CLOSED = 0.2;  // firmly pinched — starts drawing
+const SPREAD_OFF = 0.75;   // wide thumb+index spread — stops drawing
+const PINCH_FRAMES = 3;    // consecutive frames to confirm pinch-start
+const SPREAD_FRAMES = 3;   // consecutive frames to confirm spread-stop
 
-// Right hand: pinch thresholds with hysteresis band
-// Must pinch below PINCH_ON to start drawing, must release above PINCH_OFF to stop
-const PINCH_ON = 0.2;
-const PINCH_OFF = 0.35;
+// Palm hysteresis (left hand brush size gate)
+// Asymmetric: fast lock prevents brush jumping during wrist rotation,
+// slow unlock requires deliberate palm-facing gesture to re-activate
+const PALM_LOCK_FRAMES = 2;
+const PALM_UNLOCK_FRAMES = 8;
 
-// Left hand: pinch range for brush size mapping
+// Left hand: pinch spread range mapped to brush size
 const BRUSH_PINCH_MIN = 0.15;
 const BRUSH_PINCH_MAX = 0.9;
 
-// EMA smoothing factors (lower = smoother)
-const POSITION_SMOOTH_FACTOR = 0.6;
-const BRUSH_SMOOTH_FACTOR = 0.15;
+// --- One-Euro Filter ---
+// Adapts smoothing to velocity: fast movement = low smoothing (responsive),
+// slow/still = heavy smoothing (jitter killed). Much better than EMA for drawing.
+
+class OneEuroFilter {
+  private minCutoff: number;
+  private beta: number;
+  private dCutoff: number;
+  private xPrev: number | null = null;
+  private dxPrev = 0;
+  private tPrev: number | null = null;
+
+  constructor(minCutoff = 1.0, beta = 0.0, dCutoff = 1.0) {
+    this.minCutoff = minCutoff;
+    this.beta = beta;
+    this.dCutoff = dCutoff;
+  }
+
+  private alpha(cutoff: number, dt: number): number {
+    const tau = 1.0 / (2 * Math.PI * cutoff);
+    return 1.0 / (1.0 + tau / dt);
+  }
+
+  filter(x: number, t: number): number {
+    if (this.xPrev === null || this.tPrev === null) {
+      this.xPrev = x;
+      this.tPrev = t;
+      return x;
+    }
+    const dt = Math.max((t - this.tPrev) / 1000, 0.001); // seconds, clamped
+    const dx = (x - this.xPrev) / dt;
+    const aDx = this.alpha(this.dCutoff, dt);
+    const dxHat = aDx * dx + (1 - aDx) * this.dxPrev;
+    const cutoff = this.minCutoff + this.beta * Math.abs(dxHat);
+    const a = this.alpha(cutoff, dt);
+    const xHat = a * x + (1 - a) * this.xPrev;
+    this.xPrev = xHat;
+    this.dxPrev = dxHat;
+    this.tPrev = t;
+    return xHat;
+  }
+
+  reset() {
+    this.xPrev = null;
+    this.dxPrev = 0;
+    this.tPrev = null;
+  }
+}
 
 // --- Gesture Helpers ---
 
@@ -71,19 +123,26 @@ function getPinchRatio(landmarks: NormalizedLandmark[]): number {
   return pinchDist / handScale;
 }
 
-function isPinching(landmarks: NormalizedLandmark[], wasDrawing: boolean): boolean {
-  const ratio = getPinchRatio(landmarks);
-  // Hysteresis: harder to start drawing than to stop
-  return wasDrawing ? ratio < PINCH_OFF : ratio < PINCH_ON;
-}
-
-function mapPinchToBrushSize(
-  ratio: number,
-  minBrush: number,
-  maxBrush: number,
-): number {
+function mapPinchToBrushSize(ratio: number, minBrush: number, maxBrush: number): number {
   const t = Math.max(0, Math.min(1, (ratio - BRUSH_PINCH_MIN) / (BRUSH_PINCH_MAX - BRUSH_PINCH_MIN)));
   return minBrush + t * (maxBrush - minBrush);
+}
+
+/**
+ * Detects whether the left hand's palm is facing the camera.
+ * Uses the 2D cross product of (INDEX_MCP - WRIST) × (PINKY_MCP - WRIST).
+ * Positive = palm facing camera for a left hand on a front-facing (user) camera.
+ * Rotating the wrist so the back faces the camera flips the sign.
+ */
+function isPalmFacingCamera(landmarks: NormalizedLandmark[]): boolean {
+  const wrist = landmarks[WRIST];
+  const indexMcp = landmarks[INDEX_MCP];
+  const pinkyMcp = landmarks[PINKY_MCP];
+  const ax = indexMcp.x - wrist.x;
+  const ay = indexMcp.y - wrist.y;
+  const bx = pinkyMcp.x - wrist.x;
+  const by = pinkyMcp.y - wrist.y;
+  return ax * by - ay * bx > 0;
 }
 
 // --- Hook ---
@@ -95,24 +154,29 @@ export function useHandTracking(
 ): HandTrackingState {
   const [state, setState] = useState<HandTrackingState>(DEFAULT_STATE);
 
-  // Refs for mutable state that shouldn't trigger re-renders
   const handLandmarkerRef = useRef<HandLandmarker | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const rafIdRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Right hand: hysteresis counter for draw state
-  const drawCounterRef = useRef(0);
-  const lastDrawStateRef = useRef(false);
+  // Right hand: two-gesture draw state
+  const lastDrawStateRef = useRef(false);  // current draw state
+  const pinchFrameCountRef = useRef(0);   // consecutive frames confirming current gesture
 
-  // Smoothed position (client coords)
-  const smoothXRef = useRef<number | null>(null);
-  const smoothYRef = useRef<number | null>(null);
+  // Position filters (One-Euro): minCutoff=1.0 kills jitter at rest, beta=0.15 reduces lag at speed
+  const filterXRef = useRef(new OneEuroFilter(1.0, 0.15));
+  const filterYRef = useRef(new OneEuroFilter(1.0, 0.15));
 
-  // Left hand: smoothed brush size
-  const smoothBrushRef = useRef<number | null>(null);
+  // Brush size filter (One-Euro): smoother, no speed adaptation
+  const filterBrushRef = useRef(new OneEuroFilter(0.5, 0.0));
 
-  // Keep brush range in a ref so the rAF loop reads the latest value
+  // Last committed brush size — held when palm turns away or left hand drops out
+  const lastBrushSizeRef = useRef<number | null>(null);
+
+  // Left hand: palm orientation state + hysteresis counter
+  const palmFacingRef = useRef(false);
+  const palmCounterRef = useRef(0);
+
   const brushRangeRef = useRef(brushRange);
   brushRangeRef.current = brushRange;
 
@@ -133,11 +197,14 @@ export function useHandTracking(
       videoRef.current.remove();
       videoRef.current = null;
     }
-    drawCounterRef.current = 0;
     lastDrawStateRef.current = false;
-    smoothXRef.current = null;
-    smoothYRef.current = null;
-    smoothBrushRef.current = null;
+    pinchFrameCountRef.current = 0;
+    filterXRef.current.reset();
+    filterYRef.current.reset();
+    filterBrushRef.current.reset();
+    lastBrushSizeRef.current = null;
+    palmFacingRef.current = false;
+    palmCounterRef.current = 0;
     setState(DEFAULT_STATE);
   }, []);
 
@@ -213,15 +280,12 @@ export function useHandTracking(
 
         const canvas = canvasRef.current;
         if (!canvas || !videoRef.current || !handLandmarkerRef.current) return;
-        if (videoRef.current.readyState < 2) return; // not enough data
+        if (videoRef.current.readyState < 2) return;
 
-        const result = handLandmarkerRef.current.detectForVideo(
-          videoRef.current,
-          performance.now(),
-        );
+        const timestamp = performance.now();
+        const result = handLandmarkerRef.current.detectForVideo(videoRef.current, timestamp);
 
-        // Find right and left hands using handedness labels
-        // Right hand = cursor + draw, Left hand = brush size only
+        // Right hand = cursor + draw, Left hand = brush size only (palm-facing gate)
         let rightHandIndex = -1;
         let leftHandIndex = -1;
         if (result.landmarks.length >= 1 && result.handedness) {
@@ -236,80 +300,94 @@ export function useHandTracking(
         // --- Right hand: position + drawing ---
 
         if (rightHandIndex === -1 || !result.landmarks[rightHandIndex]) {
-          // Reset position smoothing so re-entry starts fresh
-          smoothXRef.current = null;
-          smoothYRef.current = null;
+          // Reset filters so re-entry starts at actual position (no straight-line artifact)
+          filterXRef.current.reset();
+          filterYRef.current.reset();
+          pinchFrameCountRef.current = 0;
           if (lastDrawStateRef.current) {
-            drawCounterRef.current = 0;
             lastDrawStateRef.current = false;
             setState((prev) => ({ ...prev, isActive: false, isDrawing: false }));
           } else {
-            setState((prev) =>
-              prev.isActive ? { ...prev, isActive: false } : prev,
-            );
+            setState((prev) => (prev.isActive ? { ...prev, isActive: false } : prev));
           }
           return;
         }
 
         const rightLandmarks = result.landmarks[rightHandIndex];
 
-        // Position: palm center (landmark 9), mirrored X
-        // Map to full viewport like a mouse cursor
+        // Position: palm center (landmark 9), mirror X to match viewport orientation
         const palm = rightLandmarks[MIDDLE_MCP];
         const rawX = (1 - palm.x) * window.innerWidth;
         const rawY = palm.y * window.innerHeight;
 
-        // Smooth position with EMA — initialize on first detection
-        if (smoothXRef.current === null) {
-          smoothXRef.current = rawX;
-          smoothYRef.current = rawY;
-        } else {
-          smoothXRef.current = smoothXRef.current * (1 - POSITION_SMOOTH_FACTOR) + rawX * POSITION_SMOOTH_FACTOR;
-          smoothYRef.current = smoothYRef.current! * (1 - POSITION_SMOOTH_FACTOR) + rawY * POSITION_SMOOTH_FACTOR;
-        }
-        const clientX = smoothXRef.current;
-        const clientY = smoothYRef.current!;
+        const clientX = filterXRef.current.filter(rawX, timestamp);
+        const clientY = filterYRef.current.filter(rawY, timestamp);
 
-        // Engine coords: convert client position to canvas space
+        // Engine coords: convert client position to canvas space (Y-flipped)
         const rect = canvas.getBoundingClientRect();
         const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
         const canvasY = canvas.height - (clientY - rect.top) * (canvas.height / rect.height);
 
-        // Draw state: pinch = drawing, with hysteresis band + frame hysteresis
-        const rawPinch = isPinching(rightLandmarks, lastDrawStateRef.current);
-        if (rawPinch !== lastDrawStateRef.current) {
-          drawCounterRef.current++;
-          if (drawCounterRef.current >= DRAW_HYSTERESIS_FRAMES) {
-            lastDrawStateRef.current = rawPinch;
-            drawCounterRef.current = 0;
+        // Draw state: pinch starts, wide spread stops, dead zone in between
+        const ratio = getPinchRatio(rightLandmarks);
+        if (!lastDrawStateRef.current) {
+          // Not drawing — watch for firm pinch to start
+          if (ratio < PINCH_CLOSED) {
+            pinchFrameCountRef.current++;
+            if (pinchFrameCountRef.current >= PINCH_FRAMES) {
+              lastDrawStateRef.current = true;
+              pinchFrameCountRef.current = 0;
+            }
+          } else {
+            pinchFrameCountRef.current = 0;
           }
         } else {
-          drawCounterRef.current = 0;
+          // Drawing — watch for wide spread to stop
+          if (ratio > SPREAD_OFF) {
+            pinchFrameCountRef.current++;
+            if (pinchFrameCountRef.current >= SPREAD_FRAMES) {
+              lastDrawStateRef.current = false;
+              pinchFrameCountRef.current = 0;
+            }
+          } else {
+            pinchFrameCountRef.current = 0;
+          }
         }
 
-        // --- Left hand: brush size ---
+        // --- Left hand: brush size (only when palm faces camera) ---
+        // Turn wrist away from screen to lock brush size; turn palm back to adjust.
 
-        let brushSize: number | null = null;
+        let brushSize: number | null = lastBrushSizeRef.current;
+
         if (leftHandIndex !== -1 && result.landmarks[leftHandIndex]) {
           const leftLandmarks = result.landmarks[leftHandIndex];
-          const pinchRatio = getPinchRatio(leftLandmarks);
-          const { min, max } = brushRangeRef.current;
-          const rawBrush = mapPinchToBrushSize(pinchRatio, min, max);
 
-          // Heavy EMA smoothing — initialize on first detection
-          if (smoothBrushRef.current === null) {
-            smoothBrushRef.current = rawBrush;
+          // Palm orientation with asymmetric hysteresis:
+          // - locking (facing→away) is fast to freeze brush before rotation distorts landmarks
+          // - unlocking (away→facing) is slow to require a deliberate gesture
+          const rawPalmFacing = isPalmFacingCamera(leftLandmarks);
+          if (rawPalmFacing !== palmFacingRef.current) {
+            palmCounterRef.current++;
+            const threshold = palmFacingRef.current ? PALM_LOCK_FRAMES : PALM_UNLOCK_FRAMES;
+            if (palmCounterRef.current >= threshold) {
+              palmFacingRef.current = rawPalmFacing;
+              palmCounterRef.current = 0;
+            }
           } else {
-            smoothBrushRef.current =
-              smoothBrushRef.current * (1 - BRUSH_SMOOTH_FACTOR) +
-              rawBrush * BRUSH_SMOOTH_FACTOR;
+            palmCounterRef.current = 0;
           }
-          brushSize = Math.round(smoothBrushRef.current);
-        } else {
-          // Left hand gone — keep last known brush size (don't reset to null)
-          // so brush doesn't jump when left hand briefly drops out
-          if (smoothBrushRef.current !== null) {
-            brushSize = Math.round(smoothBrushRef.current);
+
+          if (palmFacingRef.current) {
+            // Palm facing camera: live brush size from pinch spread
+            const { min, max } = brushRangeRef.current;
+            const rawBrush = mapPinchToBrushSize(getPinchRatio(leftLandmarks), min, max);
+            const smoothedBrush = filterBrushRef.current.filter(rawBrush, timestamp);
+            brushSize = Math.round(smoothedBrush);
+            lastBrushSizeRef.current = brushSize;
+          } else {
+            // Palm turned away: lock size and reset filter so next activation
+            // starts fresh rather than interpolating from a stale position
+            filterBrushRef.current.reset();
           }
         }
 
