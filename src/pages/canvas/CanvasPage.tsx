@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { FloppyDiskIcon } from '@phosphor-icons/react';
 import { createEngine, type Engine } from '../../engine/renderer';
@@ -176,6 +177,10 @@ function toCanvasCoords(
 }
 
 export function CanvasPage() {
+  const [searchParams] = useSearchParams();
+  const autostart = searchParams.has('autostart');
+  const autoHandTracking = searchParams.has('handtracking');
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuDrawerRef = useRef<MenuDrawerHandle>(null);
   const brushOverlayRef = useRef<BrushOverlayHandle>(null);
@@ -188,7 +193,7 @@ export function CanvasPage() {
   const { isSaving, saveNow } = useAutoDraft(engine);
   const isInitialRender = useRef(true);
   const needsInitialLoad = useRef(true);
-  const [handTrackingEnabled, setHandTrackingEnabled] = useState(false);
+  const [handTrackingEnabled, setHandTrackingEnabled] = useState(autoHandTracking);
   const prevHandDrawing = useRef(false);
 
   const [canvasBottom, setCanvasBottom] = useState(0);
@@ -228,28 +233,34 @@ export function CanvasPage() {
     setEngine(eng);
     eng.start();
     needsInitialLoad.current = true;
-    // Restore persisted tab — use 'owned' when returning from a successful mint
-    openOverlay(pendingMintLoad ? 'owned' : currentTab);
-    computeCanvasBottom();
 
-    // Let a few frames render so the canvas isn't blank, then freeze.
-    // We count to 5 then freeze on the NEXT rAF to guarantee the engine's
-    // render loop has painted the final frame before we halt it.
-    isInitialRender.current = true;
-    let frames = 0;
-    const waitForContent = () => {
-      frames++;
-      if (frames >= 5) {
-        // Freeze one frame later so the engine's rAF callback runs first
-        requestAnimationFrame(() => {
-          eng.setGlobalFreeze(true);
-          isInitialRender.current = false;
-        });
-      } else {
-        requestAnimationFrame(waitForContent);
-      }
-    };
-    requestAnimationFrame(waitForContent);
+    if (autostart) {
+      // Skip overlay — go straight to drawing canvas
+      isInitialRender.current = false;
+    } else {
+      // Restore persisted tab — use 'owned' when returning from a successful mint
+      openOverlay(pendingMintLoad ? 'owned' : currentTab);
+      computeCanvasBottom();
+
+      // Let a few frames render so the canvas isn't blank, then freeze.
+      // We count to 5 then freeze on the NEXT rAF to guarantee the engine's
+      // render loop has painted the final frame before we halt it.
+      isInitialRender.current = true;
+      let frames = 0;
+      const waitForContent = () => {
+        frames++;
+        if (frames >= 5) {
+          // Freeze one frame later so the engine's rAF callback runs first
+          requestAnimationFrame(() => {
+            eng.setGlobalFreeze(true);
+            isInitialRender.current = false;
+          });
+        } else {
+          requestAnimationFrame(waitForContent);
+        }
+      };
+      requestAnimationFrame(waitForContent);
+    }
 
     return () => {
       eng.destroy();
