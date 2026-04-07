@@ -7,7 +7,9 @@ import '../../engine/ui/menu.css';
 import menuHtml from '../../engine/ui/menu.html?raw';
 
 export interface MenuDrawerHandle {
+  open: () => void;
   close: () => void;
+  toggle: () => void;
 }
 
 export interface MenuDrawerProps {
@@ -131,7 +133,18 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
   useEffect(() => { onBrushSizeChangeRef.current = onBrushSizeChange; });
 
   useImperativeHandle(ref, () => ({
+    open: () => menuRef.current?.open(),
     close: () => menuRef.current?.close(),
+    toggle: () => {
+      const ctrl = menuRef.current;
+      if (!ctrl) return;
+      const container = wrapperRef.current?.querySelector('#menu-container');
+      if (container?.classList.contains('menu-closed')) {
+        ctrl.open();
+      } else {
+        ctrl.close();
+      }
+    },
   }));
 
   const onMenuAction = useCallback(

@@ -34,7 +34,8 @@
       "WebFetch(domain:capacitorjs.com)",
       "WebFetch(domain:ai.google.dev)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(bun run:*)"
     ]
   }
 }

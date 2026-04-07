@@ -23,9 +23,11 @@ interface BrushOverlayProps {
   engine: Engine | null;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   hidden: boolean;
+  /** When true, show a small pointer dot instead of the brush preview */
+  pointerMode?: boolean;
 }
 
-const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function BrushOverlay({ engine, canvasRef, hidden }, ref) {
+const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function BrushOverlay({ engine, canvasRef, hidden, pointerMode }, ref) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const visible = useRef(false);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
@@ -39,31 +41,42 @@ const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function 
       return;
     }
 
+    el.style.left = clientX + 'px';
+    el.style.top = clientY + 'px';
+
+    // Always show brush preview ring
     const rect = canvas.getBoundingClientRect();
-    const brushSize = engine.getDrawingManager().getBrushSize();
+    const brushSz = engine.getDrawingManager().getBrushSize();
     const params = engine.getParams();
 
     const displayScaleX = rect.width / canvas.width;
     const displayScaleY = rect.height / canvas.height;
-    let displayWidth = brushSize * 2 * displayScaleX;
-    let displayHeight = brushSize * 2 * displayScaleY;
+    let displayWidth = brushSz * 2 * displayScaleX;
+    let displayHeight = brushSz * 2 * displayScaleY;
 
     let isSquare = false;
     if (params.fxWithBlocking) {
       const blockWidthPx = canvas.width / params.blockingScale;
       const blockHeightPx = canvas.height / params.blockingScale;
-      displayHeight = brushSize * 2 * (blockHeightPx / blockWidthPx) * displayScaleY;
+      displayHeight = brushSz * 2 * (blockHeightPx / blockWidthPx) * displayScaleY;
       isSquare = true;
     }
 
-    el.style.left = clientX + 'px';
-    el.style.top = clientY + 'px';
     el.style.width = displayWidth + 'px';
     el.style.height = displayHeight + 'px';
     el.style.borderRadius = isSquare ? '0' : '50%';
+    el.style.border = '2px solid rgba(0, 255, 128, 0.7)';
+
+    // In pointer mode: add a filled center dot via radial gradient
+    if (pointerMode) {
+      el.style.background = 'radial-gradient(circle, rgba(0,255,128,0.9) 3px, transparent 4px)';
+    } else {
+      el.style.background = 'transparent';
+    }
+
     el.style.opacity = '1';
     visible.current = true;
-  }, [engine, canvasRef, hidden]);
+  }, [engine, canvasRef, hidden, pointerMode]);
 
   const hide = useCallback(() => {
     if (overlayRef.current) overlayRef.current.style.opacity = '0';
@@ -152,7 +165,7 @@ const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function 
         borderRadius: '50%',
         background: 'transparent',
         transform: 'translate(-50%, -50%)',
-        zIndex: 100,
+        zIndex: 9999,
         opacity: 0,
         transition: 'opacity 0.15s ease, border-radius 0s',
       }}
@@ -194,7 +207,14 @@ export function CanvasPage() {
   const isInitialRender = useRef(true);
   const needsInitialLoad = useRef(true);
   const [handTrackingEnabled, setHandTrackingEnabled] = useState(autoHandTracking);
-  const prevHandDrawing = useRef(false);
+  const prevHandDrawing = useRef(false);   // owned by draw effect
+  const prevClickDrawing = useRef(false);  // owned by virtual click effect
+
+  // Check actual menu DOM state — always in sync, no stale refs
+  const isMenuOpen = useCallback(() => {
+    const el = document.getElementById('menu-container');
+    return el ? !el.classList.contains('menu-closed') : false;
+  }, []);
 
   const [canvasBottom, setCanvasBottom] = useState(0);
 
@@ -313,11 +333,55 @@ export function CanvasPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Drive engine from hand tracking
+  // Open/close menu from hand gesture
   useEffect(() => {
-    if (!engine || !handTracking.isActive) {
-      // If hand tracking was drawing and goes inactive, release
-      if (prevHandDrawing.current) {
+    if (handTracking.menuCommand === 'open' && !isMenuOpen()) {
+      menuDrawerRef.current?.open();
+    } else if (handTracking.menuCommand === 'close' && isMenuOpen()) {
+      menuDrawerRef.current?.close();
+    }
+  }, [handTracking.menuCommand, isMenuOpen]);
+
+  // Virtual click: when menu is open and hand tracking pinches, behave like a real mouse.
+  // - Click on canvas (outside menu): close menu + start drawing immediately
+  // - Click on menu button: perform the action
+  // - Click on menu non-button area: close menu, do NOT start drawing
+  useEffect(() => {
+    if (!isMenuOpen() || !handTracking.isActive) {
+      prevClickDrawing.current = handTracking.isDrawing;
+      return;
+    }
+    if (handTracking.isDrawing && !prevClickDrawing.current) {
+      const { x, y } = handTracking.clientPosition;
+      const el = document.elementFromPoint(x, y);
+      if (el instanceof HTMLElement) {
+        const menuContainer = document.getElementById('menu-container');
+        const actionBar = document.querySelector('.action-bar');
+        const isInsideMenu = menuContainer?.contains(el) || actionBar?.contains(el);
+
+        if (isInsideMenu) {
+          // Click inside menu — dispatch events, let menu handle it
+          // (button click or non-button close are handled by menu's own handlers)
+          el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
+          el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y }));
+          el.click();
+          brushOverlayRef.current?.refresh();
+          // Suppress drawing — prevClickDrawing stays true, draw effect won't see this pinch
+        } else {
+          // Click outside menu (canvas) — close menu, draw effect will start drawing
+          menuDrawerRef.current?.close();
+        }
+      }
+    }
+    prevClickDrawing.current = handTracking.isDrawing;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handTracking.isDrawing, handTracking.isActive, isMenuOpen]);
+
+  // Drive engine from hand tracking (skip when menu is open — pinch = click, not draw)
+  useEffect(() => {
+    const menuUp = isMenuOpen();
+    if (!engine || !handTracking.isActive || menuUp) {
+      if (prevHandDrawing.current && !menuUp) {
         engine?.handlePointerUp();
         prevHandDrawing.current = false;
       }
@@ -437,7 +501,7 @@ export function CanvasPage() {
         onPointerCancel={onPointerUp}
         onWheel={onWheel}
       />
-      <BrushOverlay ref={brushOverlayRef} engine={engine} canvasRef={canvasRef} hidden={isOverlayOpen} />
+      <BrushOverlay ref={brushOverlayRef} engine={engine} canvasRef={canvasRef} hidden={isOverlayOpen} pointerMode={handTrackingEnabled && isMenuOpen()} />
       <div className={cn(
         "fixed top-4 left-4 z-100 pointer-events-none flex items-center gap-1.5 transition-opacity duration-500 ease-in-out",
         isSaving ? "opacity-100" : "opacity-0",
