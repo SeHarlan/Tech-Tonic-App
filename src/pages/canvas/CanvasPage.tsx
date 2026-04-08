@@ -209,6 +209,11 @@ export function CanvasPage() {
   const [handTrackingEnabled, setHandTrackingEnabled] = useState(autoHandTracking);
   const prevHandDrawing = useRef(false);   // owned by draw effect
   const prevClickDrawing = useRef(false);  // owned by virtual click effect
+  // Set when a pinch is consumed as an in-menu click. Blocks the draw effect
+  // from starting a stroke on the same pinch cycle (user must release and
+  // re-pinch). Mirrors how a real mouse press+release on a menu doesn't
+  // start a drag on the canvas below.
+  const suppressHandDrawUntilRelease = useRef(false);
 
   // Check actual menu DOM state — always in sync, no stale refs
   const isMenuOpen = useCallback(() => {
@@ -356,17 +361,19 @@ export function CanvasPage() {
       const el = document.elementFromPoint(x, y);
       if (el instanceof HTMLElement) {
         const menuContainer = document.getElementById('menu-container');
-        const actionBar = document.querySelector('.action-bar');
-        const isInsideMenu = menuContainer?.contains(el) || actionBar?.contains(el);
+        const actionBar = document.getElementById('engine-action-bar');
+        const isInsideMenu = !!(menuContainer?.contains(el) || actionBar?.contains(el));
 
         if (isInsideMenu) {
           // Click inside menu — dispatch events, let menu handle it
-          // (button click or non-button close are handled by menu's own handlers)
+          // (button click or non-button close are handled by menu's own handlers).
+          // Set suppress flag so the draw effect won't start a stroke on this
+          // same pinch — even if the click closed the menu (empty-area click).
+          suppressHandDrawUntilRelease.current = true;
           el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: x, clientY: y }));
           el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y }));
           el.click();
           brushOverlayRef.current?.refresh();
-          // Suppress drawing — prevClickDrawing stays true, draw effect won't see this pinch
         } else {
           // Click outside menu (canvas) — close menu, draw effect will start drawing
           menuDrawerRef.current?.close();
@@ -389,6 +396,18 @@ export function CanvasPage() {
     }
 
     const { canvasPosition, isDrawing, brushSize } = handTracking;
+
+    // If the current pinch was consumed as an in-menu click, don't start a
+    // stroke. Wait for the user to release before re-enabling draw handling.
+    if (suppressHandDrawUntilRelease.current) {
+      if (brushSize !== null) {
+        engine.getDrawingManager().setBrushSize(brushSize);
+      }
+      if (!isDrawing) {
+        suppressHandDrawUntilRelease.current = false;
+      }
+      return;
+    }
 
     // Update brush size from left hand (if detected)
     if (brushSize !== null) {
