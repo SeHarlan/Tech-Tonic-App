@@ -426,6 +426,17 @@ export function createDrawingManager(
 
     setBrushSize(size: number) {
       brushSize = size;
+      // Snap the discrete index to the nearest step so that subsequent
+      // increaseBrushSize / decreaseBrushSize calls step from the current
+      // continuous value (e.g. wheel or hand-tracking writes) instead of
+      // from whatever step was last active.
+      let nearest = 0;
+      let minDiff = Infinity;
+      for (let i = 0; i < brushSizeOptions.length; i++) {
+        const d = Math.abs(brushSizeOptions[i] - size);
+        if (d < minDiff) { minDiff = d; nearest = i; }
+      }
+      brushSizeIndex = nearest;
     },
     getBrushSize: () => brushSize,
     getBrushSizeIndex: () => brushSizeIndex,

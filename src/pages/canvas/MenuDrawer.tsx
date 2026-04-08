@@ -10,6 +10,12 @@ export interface MenuDrawerHandle {
   open: () => void;
   close: () => void;
   toggle: () => void;
+  /**
+   * Pull the current brush size from the engine into the menu's internal
+   * display state. Call after any non-menu source (hand tracking, mouse wheel)
+   * changes the engine brush size so the menu label/preview stay accurate.
+   */
+  syncBrushFromEngine: () => void;
 }
 
 export interface MenuDrawerProps {
@@ -144,6 +150,15 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(function
       } else {
         ctrl.close();
       }
+    },
+    syncBrushFromEngine: () => {
+      const ctrl = menuRef.current;
+      const eng = engineRef.current;
+      if (!ctrl || !eng) return;
+      // Engine.setBrushSize() already snaps brushSizeIndex to the nearest
+      // option, so just read both fields back instead of repeating the search.
+      const dm = eng.getDrawingManager();
+      ctrl.setState({ brushSize: dm.getBrushSize(), brushSizeIndex: dm.getBrushSizeIndex() });
     },
   }));
 

@@ -6,16 +6,16 @@ import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 export interface HandTrackingState {
   /** MediaPipe loaded and detecting a hand */
   isActive: boolean;
-  /** Screen coordinates for BrushOverlay positioning */
+  /** Screen coordinates for cursor dot + brush ring positioning */
   clientPosition: { x: number; y: number };
   /** Engine coordinates (1080x1920, Y-flipped) for handlePointerDown/Move/Up */
   canvasPosition: { x: number; y: number };
   /** true when right hand thumb+index are pinched together */
   isDrawing: boolean;
-  /** Brush size from left hand pinch spread (palm-facing only), or null if not set */
+  /** Brush size from two-hand distance gesture, or null when locked */
   brushSize: number | null;
-  /** Left hand menu command: 'open' on fist gesture, 'close' when palm faces camera */
-  menuCommand: 'open' | 'close' | null;
+  /** true while the two-hand brush-adjust gesture gate is satisfied */
+  isAdjustingBrush: boolean;
 }
 
 const DEFAULT_STATE: HandTrackingState = {
@@ -24,7 +24,7 @@ const DEFAULT_STATE: HandTrackingState = {
   canvasPosition: { x: 0, y: 0 },
   isDrawing: false,
   brushSize: null,
-  menuCommand: null,
+  isAdjustingBrush: false,
 };
 
 // MediaPipe model hosted on Google's CDN — downloaded at runtime only when enabled
@@ -37,31 +37,43 @@ const WRIST = 0;
 const THUMB_TIP = 4;
 const INDEX_TIP = 8;
 const INDEX_MCP = 5;
-const MIDDLE_TIP = 12;
 const MIDDLE_MCP = 9;
-const RING_TIP = 16;
 const RING_MCP = 13;
-const PINKY_TIP = 20;
 const PINKY_MCP = 17;
+const MIDDLE_TIP = 12;
+const RING_TIP = 16;
+const PINKY_TIP = 20;
 
 // Right hand: two-gesture draw control
 // Pinch (ratio < PINCH_CLOSED) starts drawing; wide spread (ratio > SPREAD_OFF) stops it.
 // Large dead zone between them means normal drawing motion can't trigger either state.
 const PINCH_CLOSED = 0.28; // pinched — starts drawing
-const SPREAD_OFF = 0.75;   // wide thumb+index spread — stops drawing
+const SPREAD_OFF = 0.45;   // thumb+index spread — stops drawing
 const PINCH_FRAMES = 3;    // consecutive frames to confirm pinch-start
-const SPREAD_FRAMES = 3;   // consecutive frames to confirm spread-stop
+const SPREAD_FRAMES = 1;   // release should feel instant; engage stays gated
 
-// Palm hysteresis (left hand brush size gate)
-const PALM_LOCK_FRAMES = 2;
-const PALM_UNLOCK_FRAMES = 8;
+// Left-hand grab-and-drag brush adjust
+// Make a fist with the left hand to "grab" — that anchors the current brush
+// size and the hand's Y position. While the fist is held, vertical hand
+// movement scales the brush relative to the anchor: up = bigger, down = smaller.
+// Open the hand to release; the size stays where you left it.
+const GRAB_ON_FRAMES = 4;   // fist must hold this long to engage
+const GRAB_OFF_FRAMES = 3;  // un-fist must hold this long to release
+// Mapping: how much normalized Y travel covers the full brush range.
+// 0.5 means moving the hand half the camera frame's height covers min↔max.
+const GRAB_FULL_RANGE_Y = 0.5;
 
-// Left hand fist gesture: opens menu (all fingers curled for FIST_FRAMES)
-const FIST_FRAMES = 8; // ~133ms at 60fps
-
-// Left hand: pinch spread range mapped to brush size
-const BRUSH_PINCH_MIN = 0.15;
-const BRUSH_PINCH_MAX = 0.9;
+// --- Cursor stability ---
+// Map an inset region of the camera frame to the full viewport. MediaPipe
+// tracking is noisiest near frame edges (low landmark confidence, lens
+// distortion), so we let the hand stay well inside the reliable center region
+// while still reaching the window edges. Users only need their hand to move
+// through roughly the middle 70% of the camera frame to cover the full screen.
+const CURSOR_EDGE_INSET_X = 0.15;
+const CURSOR_EDGE_INSET_Y = 0.12;
+// Keep the cursor visible for this many frames after the hand is lost — masks
+// brief detection dropouts without committing to the last position forever.
+const CURSOR_PERSISTENCE_FRAMES = 6;
 
 // --- One-Euro Filter ---
 // Adapts smoothing to velocity: fast movement = low smoothing (responsive),
@@ -131,13 +143,10 @@ function getPinchRatio(landmarks: NormalizedLandmark[]): number {
   return pinchDist / handScale;
 }
 
-function mapPinchToBrushSize(ratio: number, minBrush: number, maxBrush: number): number {
-  const t = Math.max(0, Math.min(1, (ratio - BRUSH_PINCH_MIN) / (BRUSH_PINCH_MAX - BRUSH_PINCH_MIN)));
-  return minBrush + t * (maxBrush - minBrush);
-}
-
 /**
- * Detects a fist gesture — all four fingers curled (tips closer to wrist than MCPs).
+ * Detects a closed fist — all four non-thumb fingertips curled toward the wrist.
+ * Compares each tip's distance to the wrist against the corresponding MCP joint:
+ * a curled finger has its tip closer to the wrist than its base knuckle is.
  * Requires at least 3 of 4 fingers curled for robustness.
  */
 function isFist(landmarks: NormalizedLandmark[]): boolean {
@@ -157,37 +166,18 @@ function isFist(landmarks: NormalizedLandmark[]): boolean {
   return curled >= 3;
 }
 
-/**
- * Detects whether the left hand's palm faces the camera.
- * Uses the z-component of the cross product (INDEX_MCP - WRIST) × (PINKY_MCP - WRIST).
- *
- * The sign depends on the coordinate system's y-axis direction:
- * - World landmarks (y-up): left hand palm toward camera → nz > 0
- * - Normalized landmarks (y-down): left hand palm toward camera → nz < 0
- *
- * Prefers worldLandmarks (3D, camera-independent) when available.
- */
-function isPalmFacingCamera(
-  worldLandmarks: NormalizedLandmark[] | undefined,
-  normalizedLandmarks: NormalizedLandmark[],
-): boolean {
-  if (worldLandmarks) {
-    const w = worldLandmarks[WRIST], i = worldLandmarks[INDEX_MCP], p = worldLandmarks[PINKY_MCP];
-    const nz = (i.x - w.x) * (p.y - w.y) - (i.y - w.y) * (p.x - w.x);
-    return nz > 0.0005; // dead zone prevents flicker near edge-on
-  }
-  // Fallback: normalized image coords (y-down flips sign)
-  const w = normalizedLandmarks[WRIST], i = normalizedLandmarks[INDEX_MCP], p = normalizedLandmarks[PINKY_MCP];
-  const nz = (i.x - w.x) * (p.y - w.y) - (i.y - w.y) * (p.x - w.x);
-  return nz < -0.0005;
-}
-
 // --- Hook ---
 
 export function useHandTracking(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   enabled: boolean,
   brushRange: { min: number; max: number },
+  /**
+   * Called once on grab-start to capture the brush size that the gesture
+   * should anchor to. Vertical hand movement during the grab is added to this
+   * baseline. Should return the engine's current brush size at call time.
+   */
+  getCurrentBrushSize: () => number,
 ): HandTrackingState {
   const [state, setState] = useState<HandTrackingState>(DEFAULT_STATE);
 
@@ -200,27 +190,31 @@ export function useHandTracking(
   const lastDrawStateRef = useRef(false);  // current draw state
   const pinchFrameCountRef = useRef(0);   // consecutive frames confirming current gesture
 
-  // Position filters (One-Euro): minCutoff=1.0 kills jitter at rest, beta=0.15 reduces lag at speed
-  const filterXRef = useRef(new OneEuroFilter(1.0, 0.15));
-  const filterYRef = useRef(new OneEuroFilter(1.0, 0.15));
+  // Position filters (One-Euro): lower minCutoff = heavier smoothing at rest;
+  // beta lets fast motion escape the smoothing. Tuned to kill edge jitter.
+  const filterXRef = useRef(new OneEuroFilter(0.3, 0.06));
+  const filterYRef = useRef(new OneEuroFilter(0.3, 0.06));
+
+  // Persist last good cursor across brief detection dropouts
+  const lastGoodClientRef = useRef<{ x: number; y: number } | null>(null);
+  const lastGoodCanvasRef = useRef<{ x: number; y: number } | null>(null);
+  const lostFramesRef = useRef(0);
 
   // Brush size filter (One-Euro): smoother, no speed adaptation
   const filterBrushRef = useRef(new OneEuroFilter(0.5, 0.0));
 
-  // Last committed brush size — held when palm turns away or left hand drops out
-  const lastBrushSizeRef = useRef<number | null>(null);
-
-  // Left hand: palm orientation state + hysteresis counter
-  const palmFacingRef = useRef(false);
-  const palmCounterRef = useRef(0);
-
-  // Left hand fist gesture → open menu
-  const fistFrameRef = useRef(0);
-  const menuCommandRef = useRef<'open' | 'close' | null>(null);
-
+  // Left-hand grab gesture state
+  const isGrabbingRef = useRef(false);
+  const grabOnCounterRef = useRef(0);
+  const grabOffCounterRef = useRef(0);
+  const anchorYRef = useRef(0);          // normalized Y at the moment of grab
+  const startingBrushRef = useRef(0);    // engine brush size at the moment of grab
 
   const brushRangeRef = useRef(brushRange);
-  brushRangeRef.current = brushRange;
+  useEffect(() => { brushRangeRef.current = brushRange; }, [brushRange]);
+
+  const getBrushSizeRef = useRef(getCurrentBrushSize);
+  useEffect(() => { getBrushSizeRef.current = getCurrentBrushSize; }, [getCurrentBrushSize]);
 
   const cleanup = useCallback(() => {
     if (rafIdRef.current) {
@@ -244,16 +238,21 @@ export function useHandTracking(
     filterXRef.current.reset();
     filterYRef.current.reset();
     filterBrushRef.current.reset();
-    lastBrushSizeRef.current = null;
-    palmFacingRef.current = false;
-    palmCounterRef.current = 0;
-    fistFrameRef.current = 0;
-    menuCommandRef.current = null;
+    isGrabbingRef.current = false;
+    grabOnCounterRef.current = 0;
+    grabOffCounterRef.current = 0;
+    anchorYRef.current = 0;
+    startingBrushRef.current = 0;
+    lastGoodClientRef.current = null;
+    lastGoodCanvasRef.current = null;
+    lostFramesRef.current = 0;
     setState(DEFAULT_STATE);
   }, []);
 
   useEffect(() => {
     if (!enabled) {
+      // cleanup() resets state to DEFAULT_STATE — intentional when toggling off.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       cleanup();
       return;
     }
@@ -344,10 +343,32 @@ export function useHandTracking(
         // --- Right hand: position + drawing ---
 
         if (rightHandIndex === -1 || !result.landmarks[rightHandIndex]) {
-          // Reset filters so re-entry starts at actual position (no straight-line artifact)
+          // Hand lost — persist the last good cursor position for a few frames
+          // so brief detection dropouts (common at frame edges) don't flash the
+          // cursor off-screen. After the persistence window, we commit to lost.
+          pinchFrameCountRef.current = 0;
+          lostFramesRef.current++;
+          if (
+            lostFramesRef.current <= CURSOR_PERSISTENCE_FRAMES &&
+            lastGoodClientRef.current &&
+            lastGoodCanvasRef.current
+          ) {
+            // Keep cursor visible at last good position; cancel any in-progress
+            // stroke (since we can't track movement reliably).
+            if (lastDrawStateRef.current) {
+              lastDrawStateRef.current = false;
+              setState((prev) => ({ ...prev, isDrawing: false }));
+            }
+            return;
+          }
+          // Committed lost — reset filters so re-entry snaps to fresh position.
+          // Also cap lostFramesRef so it doesn't grow unboundedly while the
+          // hand stays out of frame.
           filterXRef.current.reset();
           filterYRef.current.reset();
-          pinchFrameCountRef.current = 0;
+          lastGoodClientRef.current = null;
+          lastGoodCanvasRef.current = null;
+          lostFramesRef.current = CURSOR_PERSISTENCE_FRAMES + 1;
           if (lastDrawStateRef.current) {
             lastDrawStateRef.current = false;
             setState((prev) => ({ ...prev, isActive: false, isDrawing: false }));
@@ -357,12 +378,20 @@ export function useHandTracking(
           return;
         }
 
+        lostFramesRef.current = 0;
         const rightLandmarks = result.landmarks[rightHandIndex];
 
-        // Position: palm center (landmark 9), mirror X to match viewport orientation
+        // Position: palm center (MIDDLE_MCP), mirrored for natural viewport orientation.
+        // Map an inset region of the camera frame to the full viewport so the
+        // hand stays in the more reliable center portion of the frame.
         const palm = rightLandmarks[MIDDLE_MCP];
-        const rawX = (1 - palm.x) * window.innerWidth;
-        const rawY = palm.y * window.innerHeight;
+        const mirroredX = 1 - palm.x;
+        const rangeX = 1 - 2 * CURSOR_EDGE_INSET_X;
+        const rangeY = 1 - 2 * CURSOR_EDGE_INSET_Y;
+        const normX = Math.max(0, Math.min(1, (mirroredX - CURSOR_EDGE_INSET_X) / rangeX));
+        const normY = Math.max(0, Math.min(1, (palm.y - CURSOR_EDGE_INSET_Y) / rangeY));
+        const rawX = normX * window.innerWidth;
+        const rawY = normY * window.innerHeight;
 
         const clientX = filterXRef.current.filter(rawX, timestamp);
         const clientY = filterYRef.current.filter(rawY, timestamp);
@@ -371,6 +400,9 @@ export function useHandTracking(
         const rect = canvas.getBoundingClientRect();
         const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
         const canvasY = canvas.height - (clientY - rect.top) * (canvas.height / rect.height);
+
+        lastGoodClientRef.current = { x: clientX, y: clientY };
+        lastGoodCanvasRef.current = { x: canvasX, y: canvasY };
 
         // Draw state: pinch starts, wide spread stops, dead zone in between
         const ratio = getPinchRatio(rightLandmarks);
@@ -398,67 +430,78 @@ export function useHandTracking(
           }
         }
 
-        // --- Left hand: brush size (palm gate) ---
-
-        let brushSize: number | null = lastBrushSizeRef.current;
+        // --- Left hand: grab-and-drag brush adjust ---
+        // Make a fist with the left hand to engage. Vertical hand movement
+        // from the anchor point scales the brush relative to the size at the
+        // moment of grab. Open the hand to release; the brush stays put.
+        //
+        // brushSize is null unless the grab is active THIS frame. Returning
+        // null when idle is critical: CanvasPage's brush-sync effect only
+        // writes when non-null, so menu / wheel / keyboard inputs aren't
+        // overwritten.
+        let brushSize: number | null = null;
 
         if (leftHandIndex !== -1 && result.landmarks[leftHandIndex]) {
           const leftLandmarks = result.landmarks[leftHandIndex];
-          const leftWorld = result.worldLandmarks?.[leftHandIndex] as NormalizedLandmark[] | undefined;
+          const grabRaw = isFist(leftLandmarks);
 
-          const rawPalmFacing = isPalmFacingCamera(leftWorld, leftLandmarks);
-
-          // Palm orientation with asymmetric hysteresis
-          if (rawPalmFacing !== palmFacingRef.current) {
-            palmCounterRef.current++;
-            const threshold = palmFacingRef.current ? PALM_LOCK_FRAMES : PALM_UNLOCK_FRAMES;
-            if (palmCounterRef.current >= threshold) {
-              palmFacingRef.current = rawPalmFacing;
-              palmCounterRef.current = 0;
+          if (grabRaw) {
+            grabOffCounterRef.current = 0;
+            if (!isGrabbingRef.current) {
+              grabOnCounterRef.current++;
+              if (grabOnCounterRef.current >= GRAB_ON_FRAMES) {
+                // Engage: capture anchor + starting size
+                isGrabbingRef.current = true;
+                anchorYRef.current = leftLandmarks[WRIST].y;
+                startingBrushRef.current = getBrushSizeRef.current();
+                filterBrushRef.current.reset();
+              }
             }
           } else {
-            palmCounterRef.current = 0;
+            grabOnCounterRef.current = 0;
+            if (isGrabbingRef.current) {
+              grabOffCounterRef.current++;
+              if (grabOffCounterRef.current >= GRAB_OFF_FRAMES) {
+                isGrabbingRef.current = false;
+                grabOffCounterRef.current = 0;
+                filterBrushRef.current.reset();
+              }
+            }
           }
 
-          // Fist check first — works regardless of palm orientation
-          const fist = isFist(leftLandmarks);
-
-          if (fist) {
-            fistFrameRef.current++;
-            if (fistFrameRef.current >= FIST_FRAMES) {
-              menuCommandRef.current = 'open';
-            }
-            // Fist = brush locked
+          if (isGrabbingRef.current) {
+            // Hand Y in normalized image coords (0=top, 1=bottom). Up is
+            // negative delta, so we negate to make "up = bigger".
+            const currentY = leftLandmarks[WRIST].y;
+            const deltaY = currentY - anchorYRef.current;
+            const { min, max } = brushRangeRef.current;
+            const range = max - min;
+            const scale = -deltaY / GRAB_FULL_RANGE_Y; // -1..1 over GRAB_FULL_RANGE_Y travel
+            const rawBrush = Math.max(min, Math.min(max, startingBrushRef.current + scale * range));
+            const smoothedBrush = filterBrushRef.current.filter(rawBrush, timestamp);
+            brushSize = Math.round(smoothedBrush);
+          }
+        } else {
+          // Left hand lost — release immediately, no hysteresis
+          grabOnCounterRef.current = 0;
+          grabOffCounterRef.current = 0;
+          if (isGrabbingRef.current) {
+            isGrabbingRef.current = false;
             filterBrushRef.current.reset();
-          } else {
-            fistFrameRef.current = 0;
-
-            if (palmFacingRef.current) {
-              // Palm facing camera, hand open: brush size + close menu
-              const { min, max } = brushRangeRef.current;
-              const rawBrush = mapPinchToBrushSize(getPinchRatio(leftLandmarks), min, max);
-              const smoothedBrush = filterBrushRef.current.filter(rawBrush, timestamp);
-              brushSize = Math.round(smoothedBrush);
-              lastBrushSizeRef.current = brushSize;
-              menuCommandRef.current = 'close';
-            } else {
-              // Palm turned away, hand relaxed: just lock brush size
-              filterBrushRef.current.reset();
-            }
           }
         }
 
         // --- Update state ---
 
         const drawState = lastDrawStateRef.current;
-        const menuCmd = menuCommandRef.current;
+        const adjusting = isGrabbingRef.current;
 
         setState((prev) => {
           if (
             prev.isActive &&
             prev.isDrawing === drawState &&
             prev.brushSize === brushSize &&
-            prev.menuCommand === menuCmd &&
+            prev.isAdjustingBrush === adjusting &&
             Math.abs(prev.clientPosition.x - clientX) < 0.5 &&
             Math.abs(prev.clientPosition.y - clientY) < 0.5
           ) {
@@ -470,7 +513,7 @@ export function useHandTracking(
             canvasPosition: { x: canvasX, y: canvasY },
             isDrawing: drawState,
             brushSize,
-            menuCommand: menuCmd,
+            isAdjustingBrush: adjusting,
           };
         });
       }

@@ -35,7 +35,8 @@
       "WebFetch(domain:ai.google.dev)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "Bash(bunx eslint:*)"
     ]
   }
 }
