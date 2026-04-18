@@ -19,6 +19,7 @@ uniform float u_moveShapeSpeed;
 uniform mediump float u_resetThreshold;
 uniform mediump float u_resetEdgeThreshold;
 uniform vec2 u_resetNoiseScale;
+uniform mediump float u_resetThresholdVariance;
 uniform mediump float u_shouldFallThreshold;
 uniform vec2 u_shouldFallScale;
 uniform float u_fallShapeSpeed;
@@ -465,7 +466,7 @@ void main() {
     vec2 resetNoiseSt = (blockingSt + vec2(moveShapeContour, fallShapeContour)) * u_resetNoiseScale;
     mediump float resetNoise = structuralNoise(resetNoiseSt + 678.543, structuralMoveTime);
 
-    bool willReset = resetNoise < u_resetThreshold;
+    bool willReset = resetNoise < u_resetThreshold + u_resetThresholdVariance;
 
     //EXTRA MOVES
 

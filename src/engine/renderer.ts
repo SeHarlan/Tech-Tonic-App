@@ -21,6 +21,8 @@ const BLOCK_TIME_MULT = 0.05;
 const STRUCTURAL_TIME_MULT = 0.01;
 const MOVE_SPEED = 0.0045;
 const RESET_EDGE_THRESHOLD = 0.33;
+const RESET_VARIANCE_AMOUNT = 0.25;
+const RESET_VARIANCE_RATE_SEC = 120;
 const RIBBON_DIRT_THRESHOLD = 0.9;
 const USE_RIBBON_THRESHOLD = 0.45;
 const BLANK_STATIC_TIME_MULT = 2.0;
@@ -218,6 +220,7 @@ export function createEngine(config: EngineConfig): Engine {
     resetThreshold: gl.getUniformLocation(mainProg, 'u_resetThreshold'),
     resetEdgeThreshold: gl.getUniformLocation(mainProg, 'u_resetEdgeThreshold'),
     resetNoiseScale: gl.getUniformLocation(mainProg, 'u_resetNoiseScale'),
+    resetThresholdVariance: gl.getUniformLocation(mainProg, 'u_resetThresholdVariance'),
     shouldFallThreshold: gl.getUniformLocation(mainProg, 'u_shouldFallThreshold'),
     shouldFallScale: gl.getUniformLocation(mainProg, 'u_shouldFallScale'),
     fallShapeSpeed: gl.getUniformLocation(mainProg, 'u_fallShapeSpeed'),
@@ -587,6 +590,8 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.baseChunkSize, BASE_CHUNK_SIZE);
     gl.uniform1f(mainUnif.moveSpeed, MOVE_SPEED);
     gl.uniform1f(mainUnif.resetEdgeThreshold, RESET_EDGE_THRESHOLD);
+    const resetThresholdVariance = -Math.sin((2 * Math.PI * time) / RESET_VARIANCE_RATE_SEC) * RESET_VARIANCE_AMOUNT;
+    gl.uniform1f(mainUnif.resetThresholdVariance, resetThresholdVariance);
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
     gl.uniform1f(mainUnif.structuralTimeMult, STRUCTURAL_TIME_MULT);
     gl.uniform1f(mainUnif.useRibbonThreshold, USE_RIBBON_THRESHOLD);
