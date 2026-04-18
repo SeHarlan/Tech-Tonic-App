@@ -59,6 +59,7 @@ uniform sampler2D u_paintTexture;
 uniform sampler2D u_blockNoiseTex;
 uniform highp sampler3D u_noiseVolume;
 uniform int u_shapeNoiseMode;
+uniform float u_contourTimeMult;
 
 
 in vec2 v_texCoord;
@@ -88,12 +89,18 @@ float random(vec2 st) {
     return fract((p.x + p.y) * p.z);
 }
 
-// 3D structural noise - uses pre-computed noise volume texture
-// The texture stores random3D values at integer grid points with LINEAR filtering
-// providing trilinear interpolation (approximating the original cubic Hermite)
+// Noise volume dimensions — must match NOISE_VOL_XY/NOISE_VOL_Z in renderer.ts.
+#define NOISE_VOL_XY 128
+#define NOISE_VOL_Z 64
+
+// Quintic Hermite fade — C2 continuous, no kinks at grid points.
+vec2 quinticFade(vec2 f) { return f * f * f * (f * (f * 6.0 - 15.0) + 10.0); }
+vec3 quinticFade(vec3 f) { return f * f * f * (f * (f * 6.0 - 15.0) + 10.0); }
+
+// 3D structural noise — pre-computed noise volume, hardware trilinear.
 float structuralNoise(vec2 st, float t) {
     vec3 p = vec3(st, t) + vec3(u_seed * 13.591, u_seed * 7.123, 0.0);
-    return texture(u_noiseVolume, (p + 0.5) / vec3(128.0, 128.0, 64.0)).r;
+    return texture(u_noiseVolume, (p + 0.5) / vec3(float(NOISE_VOL_XY), float(NOISE_VOL_XY), float(NOISE_VOL_Z))).r;
 }
 
 // Simplified Perlin noise function
@@ -103,16 +110,13 @@ float noise(vec2 st) {
     vec2 i = floor(st);
     vec2 f = fract(st);
 
-    // Four corners in 2D of a tile
     float a = random(i);
     float b = random(i + vec2(1.0, 0.0));
     float c = random(i + vec2(0.0, 1.0));
     float d = random(i + vec2(1.0, 1.0));
 
-    // Smooth interpolation — quintic Hermite (C2 continuous, no sharp kinks at grid points)
-    vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    vec2 u = quinticFade(f);
 
-    // Mix 4 corners percentages
     return mix(mix(a, b, u.x),
                mix(c, d, u.x), u.y);
 }
@@ -123,6 +127,7 @@ float noise(vec2 st) {
 #define SHAPE_NOISE_CURRENT 0
 #define SHAPE_NOISE_FBM_QUINTIC 1
 #define SHAPE_NOISE_METABALLS 2
+#define SHAPE_NOISE_STRUCTURAL_QUINTIC 3
 
 // 4-octave fBm of quintic 2D noise, with a small rotation per octave to avoid
 // axis-aligned banding. Output is normalised to ~[0,1].
@@ -146,6 +151,37 @@ float smin(float a, float b, float k) {
 
 float shapeNoise_FbmQuintic(vec2 p, float t) {
     return fbm2(p + vec2(t * 1.3, -t * 0.7));
+}
+
+// Same 3D volume as structuralNoise() but blended with C2 quintic Hermite —
+// bypasses hardware trilinear (which is C0) so edges don't kink at grid points.
+// Wrap via bitwise AND: volume dims are powers of 2, and AND handles negatives.
+float structuralNoiseQuintic(vec2 st, float t) {
+    vec3 p = vec3(st, t) + vec3(u_seed * 13.591, u_seed * 7.123, 0.0);
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    vec3 u = quinticFade(f);
+
+    const ivec3 WRAP_MASK = ivec3(NOISE_VOL_XY - 1, NOISE_VOL_XY - 1, NOISE_VOL_Z - 1);
+    ivec3 i0 = ivec3(i) & WRAP_MASK;
+    ivec3 i1 = (ivec3(i) + ivec3(1)) & WRAP_MASK;
+
+    float c000 = texelFetch(u_noiseVolume, ivec3(i0.x, i0.y, i0.z), 0).r;
+    float c100 = texelFetch(u_noiseVolume, ivec3(i1.x, i0.y, i0.z), 0).r;
+    float c010 = texelFetch(u_noiseVolume, ivec3(i0.x, i1.y, i0.z), 0).r;
+    float c110 = texelFetch(u_noiseVolume, ivec3(i1.x, i1.y, i0.z), 0).r;
+    float c001 = texelFetch(u_noiseVolume, ivec3(i0.x, i0.y, i1.z), 0).r;
+    float c101 = texelFetch(u_noiseVolume, ivec3(i1.x, i0.y, i1.z), 0).r;
+    float c011 = texelFetch(u_noiseVolume, ivec3(i0.x, i1.y, i1.z), 0).r;
+    float c111 = texelFetch(u_noiseVolume, ivec3(i1.x, i1.y, i1.z), 0).r;
+
+    float x00 = mix(c000, c100, u.x);
+    float x10 = mix(c010, c110, u.x);
+    float x01 = mix(c001, c101, u.x);
+    float x11 = mix(c011, c111, u.x);
+    float y0 = mix(x00, x10, u.y);
+    float y1 = mix(x01, x11, u.y);
+    return mix(y0, y1, u.z);
 }
 
 // Animated metaballs — one drifting blob per integer cell, combined with smin.
@@ -175,6 +211,8 @@ float shapeNoise(vec2 p, float t) {
         return shapeNoise_FbmQuintic(p, t);
     } else if (u_shapeNoiseMode == SHAPE_NOISE_METABALLS) {
         return shapeNoise_Metaballs(p, t);
+    } else if (u_shapeNoiseMode == SHAPE_NOISE_STRUCTURAL_QUINTIC) {
+        return structuralNoiseQuintic(p, t);
     }
     return structuralNoise(p, t);
 }
@@ -306,7 +344,7 @@ void main() {
 
 
 
-    float moveContourTime = moveTime * u_moveShapeSpeed * 0.5;
+    float moveContourTime = moveTime * u_moveShapeSpeed * u_contourTimeMult;
     mediump float moveContourNoise = noise(vec2(moveContourTime, moveShapeSt.y * .05));
     float moveShapeContourMult = 5. + moveContourNoise * 5.;
     float moveShapeContourStrength = (1.-moveContourNoise) * 0.2;
@@ -404,7 +442,7 @@ void main() {
     vec2 shouldFallSt = u_fxWithBlocking ? blockingSt : st;
     shouldFallSt *=  u_shouldFallScale;
 
-    float fallContourTime = moveTime * u_fallShapeSpeed * 0.5;
+    float fallContourTime = moveTime * u_fallShapeSpeed * u_contourTimeMult;
     mediump float fallContourNoise = noise(vec2(shouldFallSt.x * .2, -fallContourTime));
     float fallShapeContourMult = 5. + fallContourNoise * 5.;
     float fallShapeContourStrength = (1. - fallContourNoise) * 0.3;

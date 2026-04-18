@@ -149,7 +149,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     rng,
   );
 
-  const useMoveBlob = rng() < 0.2;
+  const useMoveBlob = false//rng() < 0.2;
   const moveShapeSpeed = useMoveBlob ? 0.03125 : 0.025;
   const moveShapeScale = getMoveShapeScale(shouldMoveThreshold, useMoveBlob, fxWithBlocking, blockingScale);
 
@@ -184,7 +184,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     rng,
   );
 
-  const useFallBlob = rng() < 0.2;
+  const useFallBlob = false//rng() < 0.2;
   const fallShapeSpeed = useFallBlob ? 0.052 : 0.044;
   const shouldFallScale = getFallShapeScale(shouldFallThreshold, useFallBlob, fxWithBlocking, blockingScale);
 

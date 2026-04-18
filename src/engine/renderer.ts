@@ -36,6 +36,8 @@ const EXTRA_MOVE_STUTTER_SCALE: [number, number] = [500.0, 50.01];
 const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
 const EXTRA_MOVE_STUTTER_THRESHOLD = 0.1;
 const EXTRA_FALL_SHAPE_TIME_MULT = 0.025;
+// Lower = slower edge-contour wobble on move/fall shapes.
+const CONTOUR_TIME_MULT = 0.25;
 
 // Noise algorithm used for waterfall + move (left/right) shapes.
 // Swap to compare how each renders the blobby/paint-drip silhouette.
@@ -43,9 +45,10 @@ const ShapeNoiseMode = {
   Current: 0, // existing: trilinear 3D noise volume (C0 — produces sharp grid angles)
   FbmQuintic: 1, // 4-octave FBM of quintic-smoothed 2D noise (C2 everywhere)
   Metaballs: 2, // animated metaballs with smooth-min union — roundest blobs
+  StructuralQuintic: 3, // same 3D volume as Current, re-sampled with quintic Hermite (C2) via manual 8-corner texelFetch
 } as const;
 type ShapeNoiseMode = (typeof ShapeNoiseMode)[keyof typeof ShapeNoiseMode];
-const SHAPE_NOISE_MODE: ShapeNoiseMode = ShapeNoiseMode.Current;
+const SHAPE_NOISE_MODE: ShapeNoiseMode = ShapeNoiseMode.StructuralQuintic;
 
 // --- Shader helper ---
 
@@ -257,6 +260,7 @@ export function createEngine(config: EngineConfig): Engine {
     blockNoiseTex: gl.getUniformLocation(mainProg, 'u_blockNoiseTex'),
     noiseVolume: gl.getUniformLocation(mainProg, 'u_noiseVolume'),
     shapeNoiseMode: gl.getUniformLocation(mainProg, 'u_shapeNoiseMode'),
+    contourTimeMult: gl.getUniformLocation(mainProg, 'u_contourTimeMult'),
   };
 
   // --- Display Program ---
@@ -602,6 +606,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.extraFallStutterThreshold, EXTRA_FALL_STUTTER_THRESHOLD);
     gl.uniform1f(mainUnif.extraMoveStutterThreshold, EXTRA_MOVE_STUTTER_THRESHOLD);
     gl.uniform1i(mainUnif.shapeNoiseMode, SHAPE_NOISE_MODE);
+    gl.uniform1f(mainUnif.contourTimeMult, CONTOUR_TIME_MULT);
 
     // Manual mode: zero out autonomous thresholds
     const effMove = manualModeFlag ? 0.0 : params.shouldMoveThreshold;
