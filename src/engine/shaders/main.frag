@@ -58,6 +58,7 @@ uniform sampler2D u_movementTexture;
 uniform sampler2D u_paintTexture;
 uniform sampler2D u_blockNoiseTex;
 uniform highp sampler3D u_noiseVolume;
+uniform int u_shapeNoiseMode;
 
 
 in vec2 v_texCoord;
@@ -116,6 +117,68 @@ float noise(vec2 st) {
                mix(c, d, u.x), u.y);
 }
 
+// --- Shape noise (waterfall + move shapes) ---
+// Each mode returns a value approximately in [0,1], to be thresholded downstream.
+// Switch between them via u_shapeNoiseMode. See ShapeNoiseMode enum in renderer.ts.
+#define SHAPE_NOISE_CURRENT 0
+#define SHAPE_NOISE_FBM_QUINTIC 1
+#define SHAPE_NOISE_METABALLS 2
+
+// 4-octave fBm of quintic 2D noise, with a small rotation per octave to avoid
+// axis-aligned banding. Output is normalised to ~[0,1].
+float fbm2(vec2 p) {
+    const mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+    float v = 0.0;
+    float amp = 0.5;
+    v += amp * noise(p); p = rot * p * 2.03; amp *= 0.5;
+    v += amp * noise(p); p = rot * p * 2.07; amp *= 0.5;
+    v += amp * noise(p); p = rot * p * 2.11; amp *= 0.5;
+    v += amp * noise(p);
+    // max amp = 0.5 + 0.25 + 0.125 + 0.0625 = 0.9375
+    return v / 0.9375;
+}
+
+// Cubic smooth-min — blends two SDFs without creasing.
+float smin(float a, float b, float k) {
+    float h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * h * k * (1.0 / 6.0);
+}
+
+float shapeNoise_FbmQuintic(vec2 p, float t) {
+    return fbm2(p + vec2(t * 1.3, -t * 0.7));
+}
+
+// Animated metaballs — one drifting blob per integer cell, combined with smin.
+// Sample the 3x3 neighbourhood so unions cross cell boundaries.
+float shapeNoise_Metaballs(vec2 p, float t) {
+    vec2 cell = floor(p);
+    float d = 100.0;
+    for (int oy = -1; oy <= 1; oy++) {
+        for (int ox = -1; ox <= 1; ox++) {
+            vec2 c = cell + vec2(float(ox), float(oy));
+            float phase = random(c) * 6.2831853;
+            vec2 off = 0.5 + 0.3 * vec2(
+                sin(t * 1.7 + phase),
+                cos(t * 1.3 + phase * 1.7)
+            );
+            float r = 0.35 + 0.2 * random(c + 11.2);
+            d = smin(d, length(p - (c + off)) - r, 0.4);
+        }
+    }
+    // Convert SDF to [0,1]: inside ball → >0.5, outside → <0.5.
+    return clamp(0.5 - d, 0.0, 1.0);
+}
+
+// Dispatcher — second arg animates the result even when baked into p already.
+float shapeNoise(vec2 p, float t) {
+    if (u_shapeNoiseMode == SHAPE_NOISE_FBM_QUINTIC) {
+        return shapeNoise_FbmQuintic(p, t);
+    } else if (u_shapeNoiseMode == SHAPE_NOISE_METABALLS) {
+        return shapeNoise_Metaballs(p, t);
+    }
+    return structuralNoise(p, t);
+}
+
 
 
 //HUE FUNCTIONS
@@ -152,7 +215,6 @@ vec4 createWithHueCycle(vec4 base, float time) {
 
 // Function to create a gradient pattern within a block
 vec4 createGradientBlock(vec2 st, bool horizontal) {
-  // start with red to orange gradient
   float wavelength = 32.1;
 
   vec4 base = vec4(1., 1., 1., 1.0);
@@ -160,11 +222,11 @@ vec4 createGradientBlock(vec2 st, bool horizontal) {
 
   if(horizontal) {
     float x = 1.;
-    base = vec4(x, 0.,1., 1.0);
+    base = vec4(x, 0.,0.5, 1.0);
     amount = cos(PI/2. + st.y * PI * wavelength) * 0.5 + 0.5; // Amount to increase hue
   } else {
     float y = 1. ;
-    base = vec4(y, 0., 1., 1.0);
+    base = vec4(y, 0., 0.5, 1.0);
     amount = cos(PI/2. + st.x * PI * wavelength) * 0.5 + 0.5; // Amount to increase hue
   }
   base = increaseColorHue(base, amount);
@@ -176,6 +238,14 @@ void main() {
     vec2 st = v_texCoord;
     vec4 blankColor = vec4(u_blankColor, 1.);
 
+
+    //adjust for perceived brightness of rgb, where blue stays the same, red and green decrease
+    blankColor.rgb *= vec3(.9, 0.6, 1.0);
+
+    float bgFreq = PI * 2. * 128.;
+
+    blankColor.rgb = sin(vec3(st.y + 0.00, st.y + .6666, st.y + 0.3333) * bgFreq) * blankColor.rgb;
+    // blankColor.rgb -= cos(vec3(st.x + 0.6666, st.x + .3333, st.x + 0.) * bgFreq) * blankColor.rgb * 0.5;
 
     bool useGlobalFreeze = u_globalFreeze > 0.5;
 
@@ -244,7 +314,7 @@ void main() {
     moveShapeSt.x += moveShapeContour;
 
     float moveShapeTime = moveTime * u_moveShapeSpeed;
-    mediump float moveNoise = structuralNoise(moveShapeSt + vec2(moveShapeTime, 100.), moveShapeTime * 0.25);
+    mediump float moveNoise = shapeNoise(moveShapeSt + vec2(moveShapeTime, 100.), moveShapeTime * 0.25);
     float direction = moveNoise < 0.5 ? -1.0 : 1.0;
 
     // Sample drawing buffer at actual pixel position (not block-snapped)
@@ -341,7 +411,7 @@ void main() {
     float fallShapeContour = noise(vec2(shouldFallSt.x * fallShapeContourMult, fallContourTime)) * fallShapeContourStrength;
     shouldFallSt.y += fallShapeContour;
     float fallShapeTime = moveTime * u_fallShapeSpeed;
-    mediump float shouldFallNoise  = structuralNoise(
+    mediump float shouldFallNoise  = shapeNoise(
       shouldFallSt + vec2(20.124, fallShapeTime),
       fallShapeTime * 0.25);
     bool shouldFall =  shouldFallNoise  < u_shouldFallThreshold;
@@ -363,7 +433,7 @@ void main() {
 
     vec2 extraMoveShapeSt = u_fxWithBlocking ? blockingSt : st;
     float extraMoveTime = moveTime * u_moveShapeSpeed ;
-    mediump float extraMoveShape = structuralNoise(extraMoveShapeSt * u_extraMoveShapeScale - 1.345 + vec2(extraMoveTime * direction, 0.), extraMoveTime);
+    mediump float extraMoveShape = shapeNoise(extraMoveShapeSt * u_extraMoveShapeScale - 1.345 + vec2(extraMoveTime * direction, 0.), extraMoveTime);
 
     bool extraMoveStutter = random(floor(st * u_extraMoveStutterScale) + moveTime + 1.49) < u_extraMoveStutterThreshold;
     bool inExtraMove = extraMoveShape < u_extraMoveShapeThreshold;
@@ -386,7 +456,7 @@ void main() {
 
     float extraFallTime = moveTime * u_fallShapeSpeed;
 
-    mediump float extraFallShape = structuralNoise(
+    mediump float extraFallShape = shapeNoise(
       extraFallShapeSt + 1.123 + vec2(0.2, extraFallTime),
       extraFallTime * 0.25);
     bool extraFallStutter = random(floor(st * u_extraFallStutterScale) + moveTime + 2.) < u_extraFallStutterThreshold;
@@ -538,9 +608,6 @@ void main() {
 
     bool useBlank = (useBlankStatic && !useRibbon) || useBlack;
 
-
-
-
     if (useBlank) {
       initColor = blankColor;
     } else {
@@ -609,7 +676,7 @@ void main() {
 
     bool isBgColor = color == blankColor;
 
-    if(u_useColorCycle && !isBgColor) {
+    if((u_useColorCycle) && !isBgColor) {
       // Apply time-based color animation with wrapping to colors (other than bg)
       color = cycleColorHue(color, u_cycleColorHueSpeed);
     }

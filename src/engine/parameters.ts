@@ -242,6 +242,16 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   const blankStaticScale: [number, number] = [randomFloat(90, 110.0), 0.321];
 
+  const blankStaticThreshold = weightedRandom<number>(
+    [
+      [0.4, 1],
+      [0.5, 6],
+      [0.7, 3],
+      [0.9, 1],
+    ],
+    rng,
+  );
+
   // Extra fall parameters
   const extraFallShapeThreshold = weightedRandom<number>(
     [
@@ -306,20 +316,21 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     rng,
   );
 
-  const patternStrength = patternMode === 0 ? 0 : randomFloat(0.25, .75);
+
+  const patternStrength = patternMode === 0 ? 0 : randomFloat(0.5, 2);
   const patternFreq = randomFloat(1.0, 4.0);
 
-  // Golden ratio focal points for pattern origin
-  const goldenPoints: [number, number][] = [
-    [0.382, 0.382],
-    [0.618, 0.382],
-    [0.382, 0.618],
-    [0.618, 0.618],
-  ];
-  const patternCenter = goldenPoints[Math.floor(rng() * goldenPoints.length)];
+  const patternCenter = [0.5, 0.5] as [number, number];
 
   // Corner mirror: how much opposite corners reflect each other
-  const mirrorAmount = randomFloat(0, .66);
+  const mirrorAmount = weightedRandom<number>(
+    [
+      [0, 6],
+      [0.5, 3],
+      [1, 1],
+    ],
+    rng,
+  );
   const mirrorAxis = rng() < 0.5 ? 0 : 1; // 0=TL↔BR, 1=TR↔BL
 
   return {
@@ -343,6 +354,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     resetNoiseScale,
     dirtNoiseScale,
     blankStaticScale,
+    blankStaticThreshold,
     extraFallShapeThreshold,
     extraFallShapeScale,
     extraMoveShapeThreshold,

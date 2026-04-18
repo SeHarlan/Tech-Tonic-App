@@ -500,8 +500,8 @@
 
 /* ===== NFT THUMBNAIL ===== */
 .nft-thumbnail-container {
-  width: 120px;
-  aspect-ratio: 9 / 16;
+  width: 160px;
+  aspect-ratio: 16 / 9;
   background: rgba(0, 10, 5, 0.5);
 }
 

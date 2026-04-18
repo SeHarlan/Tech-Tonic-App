@@ -7,9 +7,9 @@ import { serializeState, loadStateIntoTextures, type SerializedState } from './s
 
 // --- Constants ---
 
-const CANVAS_SCALE = 1;
-const FIXED_CANVAS_WIDTH = 1080 * CANVAS_SCALE;  
-const FIXED_CANVAS_HEIGHT = 1920 * CANVAS_SCALE; 
+const CANVAS_SCALE = 1.5;
+const FIXED_CANVAS_WIDTH = 1920 * CANVAS_SCALE;
+const FIXED_CANVAS_HEIGHT = 1080 * CANVAS_SCALE;
 const FIXED_PIXEL_RATIO_UNIFORM = 1.0;
 const DEFAULT_TARGET_FPS = 60;
 const NOISE_VOL_XY = 128;
@@ -23,10 +23,9 @@ const MOVE_SPEED = 0.0045;
 const RESET_EDGE_THRESHOLD = 0.33;
 const RIBBON_DIRT_THRESHOLD = 0.9;
 const USE_RIBBON_THRESHOLD = 0.45;
-const BLANK_STATIC_THRESHOLD = 0.5;
 const BLANK_STATIC_TIME_MULT = 2.0;
 const USE_GRAYSCALE = false;
-const BLANK_COLOR: [number, number, number] = [0, 0, 0];
+const BLANK_COLOR: [number, number, number] = [0.11, 0.11, 0.11]
 const STATIC_COLOR_1: [number, number, number] = [1, 0, 0];
 const STATIC_COLOR_2: [number, number, number] = [0, 1, 0];
 const STATIC_COLOR_3: [number, number, number] = [0, 0, 1];
@@ -37,6 +36,16 @@ const EXTRA_MOVE_STUTTER_SCALE: [number, number] = [500.0, 50.01];
 const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
 const EXTRA_MOVE_STUTTER_THRESHOLD = 0.1;
 const EXTRA_FALL_SHAPE_TIME_MULT = 0.025;
+
+// Noise algorithm used for waterfall + move (left/right) shapes.
+// Swap to compare how each renders the blobby/paint-drip silhouette.
+const ShapeNoiseMode = {
+  Current: 0, // existing: trilinear 3D noise volume (C0 — produces sharp grid angles)
+  FbmQuintic: 1, // 4-octave FBM of quintic-smoothed 2D noise (C2 everywhere)
+  Metaballs: 2, // animated metaballs with smooth-min union — roundest blobs
+} as const;
+type ShapeNoiseMode = (typeof ShapeNoiseMode)[keyof typeof ShapeNoiseMode];
+const SHAPE_NOISE_MODE: ShapeNoiseMode = ShapeNoiseMode.Current;
 
 // --- Shader helper ---
 
@@ -146,6 +155,7 @@ export interface Engine {
   isRecording(): boolean;
 
   getCanvasDisplayRect(): { left: number; top: number; width: number; height: number };
+  getCanvas(): HTMLCanvasElement;
 }
 
 // --- Factory ---
@@ -246,6 +256,7 @@ export function createEngine(config: EngineConfig): Engine {
     paintTexture: gl.getUniformLocation(mainProg, 'u_paintTexture'),
     blockNoiseTex: gl.getUniformLocation(mainProg, 'u_blockNoiseTex'),
     noiseVolume: gl.getUniformLocation(mainProg, 'u_noiseVolume'),
+    shapeNoiseMode: gl.getUniformLocation(mainProg, 'u_shapeNoiseMode'),
   };
 
   // --- Display Program ---
@@ -578,7 +589,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.ribbonDirtThreshold, RIBBON_DIRT_THRESHOLD);
     gl.uniform1i(mainUnif.useGrayscale, USE_GRAYSCALE ? 1 : 0);
     gl.uniform1i(mainUnif.useColorCycle, USE_COLOR_CYCLE ? 1 : 0);
-    gl.uniform1f(mainUnif.blankStaticThreshold, BLANK_STATIC_THRESHOLD);
+    gl.uniform1f(mainUnif.blankStaticThreshold, params.blankStaticThreshold);
     gl.uniform1f(mainUnif.blankStaticTimeMult, BLANK_STATIC_TIME_MULT);
     gl.uniform3f(mainUnif.blankColor, BLANK_COLOR[0], BLANK_COLOR[1], BLANK_COLOR[2]);
     gl.uniform3f(mainUnif.staticColor1, STATIC_COLOR_1[0], STATIC_COLOR_1[1], STATIC_COLOR_1[2]);
@@ -590,6 +601,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform2f(mainUnif.extraMoveStutterScale, EXTRA_MOVE_STUTTER_SCALE[0], EXTRA_MOVE_STUTTER_SCALE[1]);
     gl.uniform1f(mainUnif.extraFallStutterThreshold, EXTRA_FALL_STUTTER_THRESHOLD);
     gl.uniform1f(mainUnif.extraMoveStutterThreshold, EXTRA_MOVE_STUTTER_THRESHOLD);
+    gl.uniform1i(mainUnif.shapeNoiseMode, SHAPE_NOISE_MODE);
 
     // Manual mode: zero out autonomous thresholds
     const effMove = manualModeFlag ? 0.0 : params.shouldMoveThreshold;
@@ -963,6 +975,9 @@ export function createEngine(config: EngineConfig): Engine {
     getCanvasDisplayRect() {
       const rect = canvas.getBoundingClientRect();
       return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    },
+    getCanvas() {
+      return canvas;
     },
   };
 

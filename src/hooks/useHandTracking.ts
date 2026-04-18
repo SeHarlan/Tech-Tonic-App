@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import { clientToCanvas } from '../utils/canvas-aspect';
 
 // --- Types ---
 
@@ -8,7 +9,7 @@ export interface HandTrackingState {
   isActive: boolean;
   /** Screen coordinates for cursor dot + brush ring positioning */
   clientPosition: { x: number; y: number };
-  /** Engine coordinates (1080x1920, Y-flipped) for handlePointerDown/Move/Up */
+  /** Engine coordinates (1920x1080, Y-flipped) for handlePointerDown/Move/Up */
   canvasPosition: { x: number; y: number };
   /** true when right hand thumb+index are pinched together */
   isDrawing: boolean;
@@ -178,6 +179,12 @@ export function useHandTracking(
    * baseline. Should return the engine's current brush size at call time.
    */
   getCurrentBrushSize: () => number,
+  /**
+   * True when the canvas element is CSS-rotated 90° clockwise (portrait
+   * viewport). Canvas-space coords need their axes swapped to account for
+   * the rotation — the bounding rect's X spans canvas Y and vice versa.
+   */
+  rotated = false,
 ): HandTrackingState {
   const [state, setState] = useState<HandTrackingState>(DEFAULT_STATE);
 
@@ -185,6 +192,9 @@ export function useHandTracking(
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const rafIdRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
+  // Throttle inference to every other animation frame (~30Hz). Canvas keeps
+  // rendering at full rate via rAF; only MediaPipe detection is skipped.
+  const frameCounterRef = useRef(0);
 
   // Right hand: two-gesture draw state
   const lastDrawStateRef = useRef(false);  // current draw state
@@ -212,6 +222,9 @@ export function useHandTracking(
 
   const brushRangeRef = useRef(brushRange);
   useEffect(() => { brushRangeRef.current = brushRange; }, [brushRange]);
+
+  const rotatedRef = useRef(rotated);
+  useEffect(() => { rotatedRef.current = rotated; }, [rotated]);
 
   const getBrushSizeRef = useRef(getCurrentBrushSize);
   useEffect(() => { getBrushSizeRef.current = getCurrentBrushSize; }, [getCurrentBrushSize]);
@@ -298,7 +311,7 @@ export function useHandTracking(
         if (cancelled) return;
 
         const handLandmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: MODEL_URL },
+          baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
           numHands: 2,
           runningMode: 'VIDEO',
           minHandDetectionConfidence: 0.5,
@@ -324,6 +337,10 @@ export function useHandTracking(
         const canvas = canvasRef.current;
         if (!canvas || !videoRef.current || !handLandmarkerRef.current) return;
         if (videoRef.current.readyState < 2) return;
+
+        // Run inference every other frame (~30Hz) — imperceptible for pointing
+        // gestures and halves CPU/GPU load.
+        if ((frameCounterRef.current++ & 1) !== 0) return;
 
         const timestamp = performance.now();
         const result = handLandmarkerRef.current.detectForVideo(videoRef.current, timestamp);
@@ -396,10 +413,7 @@ export function useHandTracking(
         const clientX = filterXRef.current.filter(rawX, timestamp);
         const clientY = filterYRef.current.filter(rawY, timestamp);
 
-        // Engine coords: convert client position to canvas space (Y-flipped)
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
-        const canvasY = canvas.height - (clientY - rect.top) * (canvas.height / rect.height);
+        const { x: canvasX, y: canvasY } = clientToCanvas(clientX, clientY, canvas, rotatedRef.current);
 
         lastGoodClientRef.current = { x: clientX, y: clientY };
         lastGoodCanvasRef.current = { x: canvasX, y: canvasY };

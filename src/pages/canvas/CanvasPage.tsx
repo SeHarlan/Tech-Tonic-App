@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { FloppyDiskIcon } from '@phosphor-icons/react';
 import { createEngine, type Engine } from '../../engine/renderer';
 import { cn } from '../../utils/ui-helpers';
+import { clientToCanvas } from '../../utils/canvas-aspect';
 import { MenuDrawer, type MenuDrawerHandle } from './MenuDrawer';
 import { CanvasOverlay, type SlidePhase } from './CanvasOverlay';
 import { useOverlay } from '../../hooks/useOverlay';
@@ -36,9 +37,20 @@ interface BrushOverlayProps {
   hidden: boolean;
   /** When true, pin the brush ring to the canvas center regardless of cursor. */
   centerRing?: boolean;
+  /**
+   * When true, the canvas is stretched non-uniformly (fullscreen mode). Force
+   * a uniform scale for the brush ring so it stays a perfect circle instead
+   * of following the stretched aspect ratio.
+   */
+  forceUniformScale?: boolean;
+  /**
+   * True when the canvas element is CSS-rotated 90° CW (portrait viewport).
+   * The ring's X/Y screen-to-canvas scale factors swap axes.
+   */
+  rotated?: boolean;
 }
 
-const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function BrushOverlay({ engine, canvasRef, hidden, centerRing }, ref) {
+const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function BrushOverlay({ engine, canvasRef, hidden, centerRing, forceUniformScale, rotated }, ref) {
   const ringRef = useRef<HTMLDivElement>(null);
   const dotRef = useRef<HTMLDivElement>(null);
   const visible = useRef(false);
@@ -68,16 +80,21 @@ const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function 
     const brushSz = engine.getDrawingManager().getBrushSize();
     const params = engine.getParams();
 
-    const displayScaleX = rect.width / canvas.width;
-    const displayScaleY = rect.height / canvas.height;
+    // Screen-px per native-canvas-px, accounting for 90° CSS rotation.
+    // When rotated, screen X spans canvas-Y (native height) and vice versa.
+    const displayScaleX = rotated ? rect.width / canvas.height : rect.width / canvas.width;
+    const displayScaleY = rotated ? rect.height / canvas.width : rect.height / canvas.height;
+    // In fullscreen mode the canvas is stretched non-uniformly — lock both
+    // axes to the X scale so the ring stays a perfect circle.
+    const ringScaleY = forceUniformScale ? displayScaleX : displayScaleY;
     const displayWidth = brushSz * 2 * displayScaleX;
-    let displayHeight = brushSz * 2 * displayScaleY;
+    let displayHeight = brushSz * 2 * ringScaleY;
 
     let isSquare = false;
     if (params.fxWithBlocking) {
       const blockWidthPx = canvas.width / params.blockingScale;
       const blockHeightPx = canvas.height / params.blockingScale;
-      displayHeight = brushSz * 2 * (blockHeightPx / blockWidthPx) * displayScaleY;
+      displayHeight = brushSz * 2 * (blockHeightPx / blockWidthPx) * ringScaleY;
       isSquare = true;
     }
 
@@ -86,7 +103,7 @@ const BrushOverlay = forwardRef<BrushOverlayHandle, BrushOverlayProps>(function 
     el.style.borderRadius = isSquare ? '0' : '50%';
     el.style.opacity = '1';
     visible.current = true;
-  }, [engine, canvasRef, hidden, centerRing]);
+  }, [engine, canvasRef, hidden, centerRing, forceUniformScale, rotated]);
 
   const hide = useCallback(() => {
     if (ringRef.current) ringRef.current.style.opacity = '0';
@@ -254,21 +271,12 @@ const CANVAS_OVERLAY_SCALE = 0.8;
 const SLIDE_EXIT_SCALE = 0.65;
 const SLIDE_ENTER_SCALE = 0.55;
 
-function toCanvasCoords(
-  e: React.PointerEvent<HTMLCanvasElement>,
-  canvas: HTMLCanvasElement,
-) {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: (e.clientX - rect.left) * (canvas.width / rect.width),
-    y: canvas.height - (e.clientY - rect.top) * (canvas.height / rect.height),
-  };
-}
 
 export function CanvasPage() {
   const [searchParams] = useSearchParams();
   const autostart = searchParams.has('autostart');
   const autoHandTracking = searchParams.has('handtracking');
+  const autoFullscreen = searchParams.get('fullscreen') === 'true';
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuDrawerRef = useRef<MenuDrawerHandle>(null);
@@ -279,10 +287,23 @@ export function CanvasPage() {
   const pendingMintLoad = useAtomValue(pendingMintLoadAtom);
   const currentTab = useAtomValue(overlayTabAtom);
   const { isOverlayOpen, openOverlay, closeOverlay } = useOverlay();
-  const { isSaving, saveNow } = useAutoDraft(engine);
   const isInitialRender = useRef(true);
   const needsInitialLoad = useRef(true);
   const [handTrackingEnabled, setHandTrackingEnabled] = useState(autoHandTracking);
+  const [isFullscreen, setIsFullscreen] = useState(autoFullscreen);
+  const [isPortrait, setIsPortrait] = useState(() =>
+    window.matchMedia('(orientation: portrait)').matches,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia('(orientation: portrait)');
+    const onChange = (e: MediaQueryListEvent) => setIsPortrait(e.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+  // Rotate the canvas 90° CW when the viewport is portrait. Skip in fullscreen
+  // mode (the stretch-to-viewport geometry doesn't mix cleanly with rotation).
+  const rotateCanvas = isPortrait && !(isFullscreen && !isOverlayOpen);
+  const { isSaving, saveNow } = useAutoDraft(engine, isFullscreen, rotateCanvas);
   // Tracks the previous pinch state so we can detect the down→up edges.
   const prevPinchRef = useRef(false);
   // Intent locked at pinch-start. Drives the rest of the pinch cycle:
@@ -329,7 +350,7 @@ export function CanvasPage() {
     () => engineRef.current?.getDrawingManager().getBrushSize() ?? 1,
     [],
   );
-  const handTracking = useHandTracking(canvasRef, handTrackingEnabled, brushRange, getCurrentBrushSize);
+  const handTracking = useHandTracking(canvasRef, handTrackingEnabled, brushRange, getCurrentBrushSize, rotateCanvas);
 
   // Create engine and open overlay on mount (or when seed changes)
   useEffect(() => {
@@ -408,13 +429,47 @@ export function CanvasPage() {
     [engine, closeOverlay],
   );
 
-  // Toggle hand tracking with 'h' key (browser only)
+  // Engine draws a circle of radius brushSize into the 1080x1920 backbuffer;
+  // when CSS stretches the display non-uniformly (fullscreen), that circle
+  // becomes an ellipse on screen. Feed displayScaleX / displayScaleY into
+  // the drawing manager so it pre-distorts the stroke to cancel it out.
+  useEffect(() => {
+    if (!engine) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dm = engine.getDrawingManager();
+    let lastRatio = Number.NaN;
+
+    const update = () => {
+      const sx = canvas.clientWidth / canvas.width;
+      const sy = canvas.clientHeight / canvas.height;
+      const ratio = sy > 0 ? sx / sy : 1;
+      if (ratio === lastRatio) return;
+      lastRatio = ratio;
+      dm.setDisplayAspectCompensation(ratio);
+    };
+    update();
+
+    const ro = new ResizeObserver(update);
+    ro.observe(canvas);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+      dm.setDisplayAspectCompensation(1);
+    };
+  }, [engine, isFullscreen, isOverlayOpen]);
+
+  // Toggle hand tracking with 'h' / fullscreen with 'j' (browser only)
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((window as any).Capacitor?.isNativePlatform?.()) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'h' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'h') {
         setHandTrackingEnabled((prev) => !prev);
+      } else if (e.key === 'j') {
+        setIsFullscreen((prev) => !prev);
       }
     }
     window.addEventListener('keydown', onKeyDown);
@@ -518,14 +573,14 @@ export function CanvasPage() {
     const canvas = canvasRef.current;
     if (!canvas || !engine) return;
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
-    const { x, y } = toCanvasCoords(e, canvas);
+    const { x, y } = clientToCanvas(e.clientX, e.clientY, canvas, rotateCanvas);
     engine.handlePointerDown(x, y);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
     if (!canvas || !engine) return;
-    const { x, y } = toCanvasCoords(e, canvas);
+    const { x, y } = clientToCanvas(e.clientX, e.clientY, canvas, rotateCanvas);
     engine.handlePointerMove(x, y);
   }
 
@@ -549,8 +604,19 @@ export function CanvasPage() {
     brushOverlayRef.current?.refresh();
   }
 
+  // Fullscreen mode stretches the canvas to the full viewport, ignoring aspect
+  // ratio. Only active while the UI overlay is closed — when it reopens the
+  // canvas reverts to normal aspect-preserving layout so chrome lays out over
+  // a correctly-proportioned canvas.
+  const stretchCanvas = isFullscreen && !isOverlayOpen;
+
   return (
-    <div className="fixed inset-x-0 top-0 bottom-[44px]  flex items-center justify-center">
+    <div
+      className={cn(
+        'fixed flex items-center justify-center',
+        stretchCanvas ? 'inset-0' : 'inset-x-0 top-0 bottom-[44px]',
+      )}
+    >
       {/* Carousel transition screenshot — slides out as old content */}
       {transitionSrc && (
         <img
@@ -572,29 +638,58 @@ export function CanvasPage() {
       <canvas
         ref={canvasRef}
         className={cn(
-          'z-10 max-h-full max-w-full object-contain touch-none',
+          'z-10 touch-none',
+          stretchCanvas
+            ? 'w-screen h-screen'
+            : rotateCanvas
+              ? ''
+              : 'max-h-full max-w-full object-contain',
           // Normal overlay scale transition (only when not carousel-sliding)
           !slidePhase && 'transition-transform duration-500 ease-in-out',
           isOverlayOpen && 'canvas-overlay-glow',
           !engine && 'bg-[rgba(0,255,128,0.1)]',
         )}
-        style={slidePhase === 'loading'
-          ? {
-              // Instantly position off-screen + small + transparent (no transition)
-              transform: `translateX(${slideDir === 1 ? '100%' : '-100%'}) scale(${SLIDE_ENTER_SCALE})`,
-              opacity: 0,
-            }
-          : slidePhase === 'sliding'
+        style={(() => {
+          // Portrait viewport: apply a landscape layout box + 90° rotation.
+          // Gets composed into every transform branch below.
+          const rotateStyle = rotateCanvas
             ? {
-                // Animate into place at overlay scale
-                transition: `transform ${SLIDE_DURATION_MS}ms ease-in-out, opacity ${SLIDE_DURATION_MS}ms ease-in-out`,
-                transform: `scale(${CANVAS_OVERLAY_SCALE})`,
-                opacity: 1,
+                aspectRatio: '16 / 9',
+                maxWidth: 'calc(100vh - 44px)',
+                maxHeight: '100vw',
+                width: 'calc(100vh - 44px)',
               }
-            : !engine
-              ? { transform: `scale(${CANVAS_OVERLAY_SCALE})` }
-              : undefined
-        }
+            : null;
+          const rot = rotateCanvas ? 'rotate(90deg) ' : '';
+
+          if (slidePhase === 'loading') {
+            return {
+              ...rotateStyle,
+              transform: `${rot}translateX(${slideDir === 1 ? '100%' : '-100%'}) scale(${SLIDE_ENTER_SCALE})`,
+              opacity: 0,
+            };
+          }
+          if (slidePhase === 'sliding') {
+            return {
+              ...rotateStyle,
+              transition: `transform ${SLIDE_DURATION_MS}ms ease-in-out, opacity ${SLIDE_DURATION_MS}ms ease-in-out`,
+              transform: `${rot}scale(${CANVAS_OVERLAY_SCALE})`,
+              opacity: 1,
+            };
+          }
+          // Overlay-open scale lives in .canvas-overlay-glow CSS; inline
+          // transform would override it, so compose explicitly when rotated.
+          if (rotateStyle) {
+            return {
+              ...rotateStyle,
+              transform: `${rot}${(isOverlayOpen || !engine) ? `scale(${CANVAS_OVERLAY_SCALE})` : ''}`.trim(),
+            };
+          }
+          if (!engine) {
+            return { transform: `scale(${CANVAS_OVERLAY_SCALE})` };
+          }
+          return undefined;
+        })()}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -607,6 +702,8 @@ export function CanvasPage() {
         canvasRef={canvasRef}
         hidden={isOverlayOpen}
         centerRing={handTracking.isAdjustingBrush}
+        forceUniformScale={stretchCanvas}
+        rotated={rotateCanvas}
       />
       <div className={cn(
         "fixed top-4 left-4 z-100 pointer-events-none flex items-center gap-1.5 transition-opacity duration-500 ease-in-out",
@@ -625,6 +722,8 @@ export function CanvasPage() {
           showTouchPrompt
           onTransitionChange={handleTransitionChange}
           needsInitialLoad={needsInitialLoad}
+          isFullscreen={isFullscreen}
+          rotated={rotateCanvas}
         />
       )}
     </div>

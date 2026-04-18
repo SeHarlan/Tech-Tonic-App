@@ -35,6 +35,12 @@ export interface DrawingManager {
   increaseBrushSize(): void;
   decreaseBrushSize(): void;
   resize(width: number, height: number): void;
+  /**
+   * Compensate brush Y-radius for non-uniform display scaling (e.g. fullscreen
+   * stretch). Pass displayScaleX / displayScaleY so strokes drawn into the
+   * 1920x1080 backbuffer appear as circles on screen. Default: 1.0.
+   */
+  setDisplayAspectCompensation(ratio: number): void;
   destroy(): void;
 }
 
@@ -235,6 +241,7 @@ export function createDrawingManager(
   let brushSizeOptions: number[] = [];
   let brushSizeIndex = 6;
   let brushSize = 0;
+  let displayAspectCompensation = 1;
 
   function initBuffers(w: number, h: number) {
     // Movement buffer
@@ -294,7 +301,7 @@ export function createDrawingManager(
 
     // Snap position to grid in blocking mode
     const radiusX = brushSize;
-    let radiusY = brushSize;
+    let radiusY = brushSize * displayAspectCompensation;
     if (blocking) {
       const blockWidthPx = canvasWidth / blockingScale;
       const blockHeightPx = canvasHeight / blockingScale;
@@ -305,7 +312,7 @@ export function createDrawingManager(
       );
       x = Math.floor(x / snapX) * snapX + snapX / 2;
       y = Math.floor(y / snapY) * snapY + snapY / 2;
-      radiusY = brushSize * (blockHeightPx / blockWidthPx);
+      radiusY = brushSize * (blockHeightPx / blockWidthPx) * displayAspectCompensation;
     }
 
     const movementMode = isMovementMode(mode);
@@ -472,6 +479,10 @@ export function createDrawingManager(
 
       initBuffers(w, h);
       genBrushSizeOptions();
+    },
+
+    setDisplayAspectCompensation(ratio: number) {
+      displayAspectCompensation = ratio > 0 ? ratio : 1;
     },
 
     destroy() {

@@ -22,6 +22,7 @@ import {
 import type { Engine } from '../../engine/renderer';
 import type { NftItem } from '../../utils/das-api';
 import { saveDraft } from '../../services/draft-storage';
+import { assertSaveableCanvasAspect } from '../../utils/canvas-aspect';
 import { UPDATE_API_URL } from '../../../config/env';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import './canvas-overlay.css';
@@ -56,9 +57,11 @@ interface CanvasOverlayProps {
   showTouchPrompt?: boolean;
   onTransitionChange?: (state: { src: string | null; phase: SlidePhase; dir: 1 | -1 }) => void;
   needsInitialLoad?: React.RefObject<boolean>;
+  isFullscreen?: boolean;
+  rotated?: boolean;
 }
 
-export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt, onTransitionChange, needsInitialLoad }: CanvasOverlayProps) {
+export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt, onTransitionChange, needsInitialLoad, isFullscreen = false, rotated = false }: CanvasOverlayProps) {
   const navigate = useNavigate();
   const { overlayTab, setOverlayTab, hasOwned } = useOverlayWithNfts();
   const { ownedNfts, discoverNfts } = useNftStore();
@@ -107,6 +110,8 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     setUpdateError(null);
 
     try {
+      assertSaveableCanvasAspect(engine.getCanvas(), rotated);
+
       // 1. Save draft as safety net
       const state = await engine.serializeState();
       await saveDraft(currentNft.id, state, currentNft.defaultWaterfallMode, engine.isManualMode());
@@ -517,6 +522,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
         updateBusy={updateBusy}
         updateResult={updateResult}
         updateError={updateError}
+        disabled={isFullscreen}
       />
     </div>
   );

@@ -16,7 +16,8 @@ void main() {
         vec2 normalizedDiff = abs(diff) / u_radius;
         outside = max(normalizedDiff.x, normalizedDiff.y) > 1.0;
     } else {
-        outside = length(diff) > u_radius.x;
+        vec2 normalizedDiff = diff / u_radius;
+        outside = dot(normalizedDiff, normalizedDiff) > 1.0;
     }
 
     if (outside) discard;

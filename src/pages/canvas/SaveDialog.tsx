@@ -13,6 +13,7 @@ interface SaveDialogProps {
   updateBusy: boolean;
   updateResult: 'success' | 'error' | null;
   updateError: string | null;
+  disabled?: boolean;
 }
 
 export function SaveDialog({
@@ -25,6 +26,7 @@ export function SaveDialog({
   updateBusy,
   updateResult,
   updateError,
+  disabled = false,
 }: SaveDialogProps) {
   if (!open) return null;
 
@@ -48,7 +50,7 @@ export function SaveDialog({
             <div className="flex flex-col items-center gap-1.5 w-full">
               <MenuButton
                 onClick={onUpdate}
-                disabled={updateBusy || !engineReady || !canUpdate}
+                disabled={disabled || updateBusy || !engineReady || !canUpdate}
                 className="tracking-[0.12em] uppercase gap-2 w-full"
               >
                 <FloppyDiskIcon size={16} weight="bold" className={cn("shrink-0", updateBusy && "animate-pulse")} />

@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import { overlayTabAtom, overlayOpenAtom, activeOwnedNftIdAtom, ownedNftsAtom } from '../store/atoms';
 import { saveDraft } from '../services/draft-storage';
+import { assertSaveableCanvasAspect } from '../utils/canvas-aspect';
 import type { Engine } from '../engine/renderer';
 
 const AUTO_SAVE_INTERVAL_MS = 60_000;
 const INDICATOR_LINGER_MS = 2_000;
 
-export function useAutoDraft(engine: Engine | null) {
+export function useAutoDraft(engine: Engine | null, disabled = false, rotated = false) {
   const overlayTab = useAtomValue(overlayTabAtom);
   const overlayOpen = useAtomValue(overlayOpenAtom);
   const activeOwnedId = useAtomValue(activeOwnedNftIdAtom);
@@ -19,14 +20,15 @@ export function useAutoDraft(engine: Engine | null) {
   const lingerTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [isSaving, setIsSaving] = useState(false);
 
-  const active = !!(engine && currentOwnedNft && overlayTab === 'owned' && !overlayOpen);
+  const active = !!(engine && currentOwnedNft && overlayTab === 'owned' && !overlayOpen && !disabled);
 
   const saveNow = useCallback(async () => {
-    if (!engine || !currentOwnedNft || savingRef.current || overlayTab !== 'owned') return;
+    if (!engine || !currentOwnedNft || savingRef.current || overlayTab !== 'owned' || disabled) return;
     savingRef.current = true;
     clearTimeout(lingerTimer.current);
     setIsSaving(true);
     try {
+      assertSaveableCanvasAspect(engine.getCanvas(), rotated);
       const state = await engine.serializeState();
       await saveDraft(currentOwnedNft.id, state, currentOwnedNft.defaultWaterfallMode, engine.isManualMode());
     } catch (err) {
@@ -34,7 +36,7 @@ export function useAutoDraft(engine: Engine | null) {
     }
     savingRef.current = false;
     lingerTimer.current = setTimeout(() => setIsSaving(false), INDICATOR_LINGER_MS);
-  }, [engine, currentOwnedNft, overlayTab]);
+  }, [engine, currentOwnedNft, overlayTab, disabled, rotated]);
 
   // Clean up linger timer on unmount
   useEffect(() => () => clearTimeout(lingerTimer.current), []);

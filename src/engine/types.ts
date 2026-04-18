@@ -42,6 +42,7 @@ export interface ShaderParams {
   resetNoiseScale: [number, number];
   dirtNoiseScale: [number, number];
   blankStaticScale: [number, number];
+  blankStaticThreshold: number;
   extraFallShapeThreshold: number;
   extraFallShapeScale: [number, number];
   extraMoveShapeThreshold: number;
