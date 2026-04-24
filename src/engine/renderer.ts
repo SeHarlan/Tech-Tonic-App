@@ -23,6 +23,9 @@ const MOVE_SPEED = 0.0045;
 const RESET_EDGE_THRESHOLD = 0.33;
 const RESET_VARIANCE_AMOUNT = 0.25;
 const RESET_VARIANCE_RATE_SEC = 120;
+// Fraction of period spent in the trough (least-reset) half.
+// 0.5 = symmetric sine. >0.5 stretches trough, compresses peak.
+const RESET_VARIANCE_TROUGH_DUTY = 0.75;
 const RIBBON_DIRT_THRESHOLD = 0.9;
 const USE_RIBBON_THRESHOLD = 0.45;
 const BLANK_STATIC_TIME_MULT = 2.0;
@@ -615,7 +618,12 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.baseChunkSize, BASE_CHUNK_SIZE);
     gl.uniform1f(mainUnif.moveSpeed, MOVE_SPEED);
     gl.uniform1f(mainUnif.resetEdgeThreshold, RESET_EDGE_THRESHOLD);
-    const resetThresholdVariance = -Math.sin((2 * Math.PI * time) / RESET_VARIANCE_RATE_SEC) * RESET_VARIANCE_AMOUNT;
+    const cyclePos = ((time / RESET_VARIANCE_RATE_SEC) % 1 + 1) % 1;
+    const duty = RESET_VARIANCE_TROUGH_DUTY;
+    const variancePhase = cyclePos < duty
+      ? (Math.PI * cyclePos) / duty
+      : Math.PI + (Math.PI * (cyclePos - duty)) / (1 - duty);
+    const resetThresholdVariance = -Math.sin(variancePhase) * RESET_VARIANCE_AMOUNT;
     gl.uniform1f(mainUnif.resetThresholdVariance, resetThresholdVariance);
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
     gl.uniform1f(mainUnif.structuralTimeMult, STRUCTURAL_TIME_MULT);

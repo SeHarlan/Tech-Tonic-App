@@ -11,7 +11,7 @@
  *   bun run scripts/generate-thumbnails.ts [--count N] [--duration SECS]
  *     [--cooldown SECS] [--output DIR] [--seeds 1,2,3]
  *
- * Defaults: count=33, duration=33s, cooldown=5s, output=./generated/thumbnails.
+ * Defaults: count=33, duration=45s, cooldown=5s, output=./generated/thumbnails.
  * Pass `--seeds` to regenerate specific seeds; otherwise random unique seeds
  * in [0, 1000) are chosen.
  *
@@ -27,8 +27,8 @@ import { randomizeShaderParameters } from '../src/engine/parameters';
 // --- Constants ---
 
 const SEED_MODULUS = 1000;
-const DEFAULT_COUNT = 33;
-const DEFAULT_DURATION_SECS = 33;
+const DEFAULT_COUNT = 11;
+const DEFAULT_DURATION_SECS = 45;
 const DEFAULT_COOLDOWN_SECS = 5;
 const DEFAULT_OUTPUT = './generated/thumbnails';
 const TARGET_FPS = 60;
