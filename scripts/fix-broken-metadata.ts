@@ -1,8 +1,8 @@
 /**
- * Fix broken NFT metadata on devnet.
+ * Fix broken NFT metadata on a collection.
  *
  * Scans the collection for assets with missing image data, re-uploads
- * the thumbnail + metadata JSON to Irys, then updates the on-chain
+ * the thumbnail + metadata JSON to Irys L1, then updates the on-chain
  * asset URI via Metaplex Core's update().
  *
  * Usage:
@@ -10,9 +10,7 @@
  */
 
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { irysUploader } from '@metaplex-foundation/umi-uploader-irys';
 import {
-  createGenericFile,
   keypairIdentity,
   publicKey,
   some,
@@ -21,17 +19,14 @@ import { mplCore, update, fetchAsset } from '@metaplex-foundation/mpl-core';
 import { readFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
-import { RPC_ENDPOINT, COLLECTION_ADDRESS } from '../config/env';
-
-// --- Config ---
+import { RPC_ENDPOINT, COLLECTION_ADDRESS, IRYS_FUNDING_RPC } from '../config/env';
+import { createIrys, uploadBytes, uploadJson } from './lib/irys-uploader';
 
 const DEFAULT_KEYPAIR = join(homedir(), '.config/solana/id.json');
 const THUMBNAILS_DIR = './generated/thumbnails';
 const COLLECTION_SYMBOL = 'TONIC';
 const COLLECTION_DESCRIPTION =
   'A generative art piece from the TechTonic Series 1 collection.';
-
-// --- Types ---
 
 interface DasAsset {
   id: string;
@@ -58,8 +53,6 @@ interface ThumbnailMetadata {
   thumbnails: ThumbnailEntry[];
 }
 
-// --- Helpers ---
-
 async function dasRpc<T>(rpc: string, method: string, params: Record<string, unknown>): Promise<T> {
   const res = await fetch(rpc, {
     method: 'POST',
@@ -83,8 +76,6 @@ function indexFromName(name: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-// --- Main ---
-
 async function main() {
   const argv = process.argv.slice(2);
   const dryRun = argv.includes('--dry-run');
@@ -98,26 +89,26 @@ async function main() {
 
   const rpcUrl = RPC_ENDPOINT;
   console.log('\n=== Fix Broken Metadata ===');
-  console.log(`  Collection: ${COLLECTION_ADDRESS}`);
-  console.log(`  RPC:        ${rpcUrl}`);
-  console.log(`  Keypair:    ${keypairPath}`);
-  console.log(`  Dry run:    ${dryRun}\n`);
+  console.log(`  Collection:    ${COLLECTION_ADDRESS}`);
+  console.log(`  RPC:           ${rpcUrl}`);
+  console.log(`  Irys:          L1 mainnet (always)`);
+  console.log(`  Keypair:       ${keypairPath}`);
+  console.log(`  Dry run:       ${dryRun}\n`);
 
-  // Set up Umi
   const keypairData = JSON.parse(await readFile(resolve(keypairPath), 'utf-8'));
   const umi = createUmi(rpcUrl);
   const keypair = umi.eddsa.createKeypairFromSecretKey(new Uint8Array(keypairData));
   umi.use(keypairIdentity(keypair));
-  umi.use(irysUploader());
   umi.use(mplCore());
-  console.log(`  Authority:  ${keypair.publicKey}\n`);
+  console.log(`  Authority:  ${keypair.publicKey}`);
 
-  // Load thumbnail metadata so we can match broken assets to image files
+  const irys = await createIrys(keypairData, IRYS_FUNDING_RPC);
+  console.log(`  Irys:       ${irys.address}\n`);
+
   const thumbMeta: ThumbnailMetadata = JSON.parse(
     await readFile(join(THUMBNAILS_DIR, 'metadata.json'), 'utf-8'),
   );
 
-  // Fetch all collection assets
   console.log('Fetching collection assets...');
   const result = await dasRpc<{ items: DasAsset[] }>(rpcUrl, 'getAssetsByGroup', {
     groupKey: 'collection',
@@ -154,56 +145,41 @@ async function main() {
       continue;
     }
 
-    // 1. Upload thumbnail image
-    console.log(`  Uploading image: ${thumbEntry.filename}`);
-    const imageBuffer = await readFile(imagePath);
-    const imageFile = createGenericFile(imageBuffer, thumbEntry.filename, {
-      contentType: 'image/png',
-    });
+    try {
+      console.log(`  Uploading image: ${thumbEntry.filename}`);
+      const imageBuffer = await readFile(imagePath);
+      const imageUri = await uploadBytes(irys, imageBuffer, thumbEntry.filename, 'image/png');
+      console.log(`  Image URI: ${imageUri}`);
 
-    let imageUri: string | undefined;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const [uri] = await umi.uploader.upload([imageFile]);
-      if (uri) { imageUri = uri; break; }
-      console.warn(`  Image upload empty (attempt ${attempt + 1}/2), retrying...`);
-    }
-    if (!imageUri) {
-      console.error(`  FAILED to upload image for ${name}, skipping.`);
+      const attributes = asset.content.metadata.attributes ?? thumbEntry.attributes;
+      const nftMetadata = {
+        name,
+        symbol: COLLECTION_SYMBOL,
+        description: COLLECTION_DESCRIPTION,
+        image: imageUri,
+        attributes,
+        properties: {
+          files: [{ uri: imageUri, type: 'image/png' }],
+          category: 'image',
+        },
+      };
+
+      const metadataUri = await uploadJson(irys, nftMetadata);
+      console.log(`  Metadata URI: ${metadataUri}`);
+
+      console.log(`  Updating on-chain asset...`);
+      const assetAccount = await fetchAsset(umi, publicKey(asset.id));
+      await update(umi, {
+        asset: assetAccount,
+        collection: publicKey(COLLECTION_ADDRESS),
+        uri: some(metadataUri),
+      }).sendAndConfirm(umi, { confirm: { commitment: 'confirmed' } });
+
+      console.log(`  Done!\n`);
+    } catch (err) {
+      console.error(`  FAILED for ${name}, skipping: ${err instanceof Error ? err.message : String(err)}\n`);
       continue;
     }
-    console.log(`  Image URI: ${imageUri}`);
-
-    // 2. Build and upload corrected metadata JSON
-    const attributes = asset.content.metadata.attributes ?? thumbEntry.attributes;
-    const nftMetadata = {
-      name,
-      symbol: COLLECTION_SYMBOL,
-      description: COLLECTION_DESCRIPTION,
-      image: imageUri,
-      attributes,
-      properties: {
-        files: [{ uri: imageUri, type: 'image/png' }],
-        category: 'image',
-      },
-    };
-
-    const metadataUri = await umi.uploader.uploadJson(nftMetadata);
-    if (!metadataUri) {
-      console.error(`  FAILED to upload metadata for ${name}, skipping.`);
-      continue;
-    }
-    console.log(`  Metadata URI: ${metadataUri}`);
-
-    // 3. Update on-chain asset URI
-    console.log(`  Updating on-chain asset...`);
-    const assetAccount = await fetchAsset(umi, publicKey(asset.id));
-    await update(umi, {
-      asset: assetAccount,
-      collection: publicKey(COLLECTION_ADDRESS),
-      uri: some(metadataUri),
-    }).sendAndConfirm(umi, { confirm: { commitment: 'confirmed' } });
-
-    console.log(`  Done!\n`);
   }
 
   console.log('=== All fixes applied ===\n');

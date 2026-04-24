@@ -1,4 +1,4 @@
-import { RPC_ENDPOINT, DEMO_MODE } from '../../config/env';
+import { RPC_ENDPOINT } from '../../config/env';
 
 export interface NftAttribute {
   trait_type: string;
@@ -58,23 +58,14 @@ function assetToNftItem(asset: DasAsset): NftItem {
   const imageFile = asset.content.files?.find((f) => f.mime === 'image/png');
 
   //TODO create a better fallback system, with cdn tried first and fallback to links/image if cdn url fails
-  let imageUrl =
+  const imageUrl =
     asset.content.links?.image ?? imageFile?.uri ?? imageFile?.cdn_uri ?? '';
 
   // Buffer files for updated NFTs (custom MIME types)
   const movementFile = asset.content.files?.find((f) => f.mime === 'image/techtonic-movement');
   const paintFile = asset.content.files?.find((f) => f.mime === 'image/techtonic-paint');
-  let movementBufferUrl = movementFile?.uri ?? movementFile?.cdn_uri;
-  let paintBufferUrl = paintFile?.uri ?? paintFile?.cdn_uri;
-
-  // Devnet assets are uploaded to the devnet Irys node but metadata references
-  // the mainnet gateway. Rewrite to the devnet gateway in demo mode.
-  const rewriteDevnet = (url: string) =>
-    DEMO_MODE ? url.replace('gateway.irys.xyz', 'devnet.irys.xyz') : url;
-
-  imageUrl = rewriteDevnet(imageUrl);
-  if (movementBufferUrl) movementBufferUrl = rewriteDevnet(movementBufferUrl);
-  if (paintBufferUrl) paintBufferUrl = rewriteDevnet(paintBufferUrl);
+  const movementBufferUrl = movementFile?.uri ?? movementFile?.cdn_uri;
+  const paintBufferUrl = paintFile?.uri ?? paintFile?.cdn_uri;
 
   return {
     id: asset.id,

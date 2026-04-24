@@ -33,9 +33,7 @@
  */
 
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { irysUploader } from '@metaplex-foundation/umi-uploader-irys';
 import {
-  createGenericFile,
   generateSigner,
   keypairIdentity,
   publicKey,
@@ -43,6 +41,7 @@ import {
   sol,
   dateTime,
 } from '@metaplex-foundation/umi';
+import { createIrys, uploadBytes, uploadJson } from './lib/irys-uploader';
 import {
   mplCandyMachine,
   create,
@@ -74,6 +73,7 @@ import {
   PHASE_DURATION_MS,
   MINT_START_TIME,
   RPC_ENDPOINT,
+  IRYS_FUNDING_RPC,
 } from '../config/env';
 
 // --- Types ---
@@ -192,15 +192,17 @@ async function main() {
     await readFile(resolve(args.keypair), 'utf-8'),
   );
 
-  // Create Umi instance
+  // Create Umi instance (MPL Core + Candy Machine only — Irys handled separately)
   const umi = createUmi(rpcUrl);
   const keypair = umi.eddsa.createKeypairFromSecretKey(
     new Uint8Array(keypairData),
   );
   umi.use(keypairIdentity(keypair));
-  umi.use(irysUploader());
   umi.use(mplCore());
   umi.use(mplCandyMachine());
+
+  // Irys L1 uploader for the collection image + metadata
+  const irys = await createIrys(keypairData, IRYS_FUNDING_RPC);
 
   console.log(`  Identity: ${keypair.publicKey}\n`);
 
@@ -219,16 +221,12 @@ async function main() {
   );
   const ext = args.collectionImage.split('.').pop()?.toLowerCase() ?? 'png';
   const contentType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
-  const collectionImageFile = createGenericFile(
-    collectionImageBuffer,
-    args.collectionImage.split('/').pop()!,
-    { contentType },
-  );
-  const [collectionImageUri] = await umi.uploader.upload([collectionImageFile]);
+  const filename = args.collectionImage.split('/').pop()!;
+  const collectionImageUri = await uploadBytes(irys, collectionImageBuffer, filename, contentType);
   console.log(`  Collection image: ${collectionImageUri}`);
 
   // Upload collection metadata
-  const collectionMetadataUri = await umi.uploader.uploadJson({
+  const collectionMetadataUri = await uploadJson(irys, {
     name: collectionName,
     description: COLLECTION_DESCRIPTION,
     image: collectionImageUri,

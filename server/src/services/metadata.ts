@@ -1,5 +1,3 @@
-import { DEMO_MODE } from '../config.ts';
-
 interface Attribute {
   trait_type: string;
   value: string;
@@ -15,14 +13,19 @@ interface NftMetadata {
     files: Array<{ uri: string; type: string }>;
     category: string;
     original_image?: string;
+    last_update_at_ms?: number;
     [key: string]: unknown;
   };
   [key: string]: unknown;
 }
 
+export const UPDATE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
 const ALLOWED_METADATA_HOSTS = [
   'https://arweave.net/',
   'https://gateway.irys.xyz/',
+  // Legacy hosts from the deprecated Arweave-bundler devnet path. Retained
+  // only for reading older pre-migration NFTs; new URIs are all gateway.irys.xyz.
   'https://devnet.irys.xyz/',
 ];
 
@@ -37,14 +40,7 @@ export async function fetchExistingMetadata(
     throw new Error('Metadata URI is not from a known Arweave/Irys gateway');
   }
 
-  // Devnet assets store URIs pointing to gateway.irys.xyz (mainnet) but content
-  // lives on devnet.irys.xyz. Rewrite the URL for fetching, same as the frontend.
-  let fetchUrl = jsonUri;
-  if (DEMO_MODE && fetchUrl.includes('gateway.irys.xyz')) {
-    fetchUrl = fetchUrl.replace('gateway.irys.xyz', 'devnet.irys.xyz');
-  }
-
-  const res = await fetch(fetchUrl);
+  const res = await fetch(jsonUri);
   if (!res.ok) {
     throw new Error(`Failed to fetch existing metadata: ${res.status}`);
   }
@@ -52,16 +48,34 @@ export async function fetchExistingMetadata(
 }
 
 /**
+ * Returns the number of ms still remaining in the 7-day cooldown, or 0 if
+ * the asset is allowed to update now. Treats missing or invalid fields as
+ * "never updated" — first update is always free.
+ */
+export function cooldownRemaining(existing: NftMetadata): number {
+  const last = existing.properties.last_update_at_ms;
+  if (typeof last !== 'number' || !Number.isFinite(last)) return 0;
+  const elapsed = Date.now() - last;
+  if (elapsed < 0 || elapsed >= UPDATE_COOLDOWN_MS) return 0;
+  return UPDATE_COOLDOWN_MS - elapsed;
+}
+
+export interface UpdateInputs {
+  imageUri: string;
+  movementUri: string;
+  paintUri: string;
+  walletAddress: string;
+}
+
+/**
  * Build updated metadata JSON with new image and buffer URIs.
  * Increments the Iteration attribute by 1.
- * Preserves all existing top-level fields to avoid data loss.
+ * Stamps properties.last_update_at_ms with the current server time — read
+ * back on the next update request to enforce the 7-day cooldown on-chain.
  */
 export function buildUpdatedMetadata(
   existing: NftMetadata,
-  imageUri: string,
-  movementUri: string,
-  paintUri: string,
-  walletAddress: string,
+  { imageUri, movementUri, paintUri, walletAddress }: UpdateInputs,
 ): NftMetadata {
   // Increment Iteration attribute
   let foundIteration = false;
@@ -82,14 +96,15 @@ export function buildUpdatedMetadata(
 
   // Track unique editor wallet addresses
   const editorsIdx = attributes.findIndex((a) => a.trait_type === 'Editors');
-  if (editorsIdx === -1) {
+  const editorsAttr = editorsIdx === -1 ? undefined : attributes[editorsIdx];
+  if (!editorsAttr) {
     attributes.push({ trait_type: 'Editors', value: walletAddress });
   } else {
-    const editors = attributes[editorsIdx].value.split(',');
+    const editors = editorsAttr.value.split(',');
     if (!editors.includes(walletAddress)) {
       attributes[editorsIdx] = {
-        ...attributes[editorsIdx],
-        value: attributes[editorsIdx].value + ',' + walletAddress,
+        ...editorsAttr,
+        value: editorsAttr.value + ',' + walletAddress,
       };
     }
   }
@@ -106,6 +121,7 @@ export function buildUpdatedMetadata(
         { uri: paintUri, type: 'image/techtonic-paint' },
       ],
       category: 'image',
+      last_update_at_ms: Date.now(),
     },
   };
 }

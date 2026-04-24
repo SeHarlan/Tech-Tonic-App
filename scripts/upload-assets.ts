@@ -1,6 +1,6 @@
 /**
- * Upload thumbnail images + Metaplex-standard metadata JSON to Arweave via
- * Irys, then emit a `config-lines.json` file (name + metadata URI pairs) that
+ * Upload thumbnail images + Metaplex-standard metadata JSON to Irys L1, then
+ * emit a `config-lines.json` file (name + metadata URI pairs) that
  * `create-candy-machine.ts` consumes as its config lines input.
  *
  * Reads `metadata.json` produced by `generate-thumbnails.ts`, uploads each
@@ -8,29 +8,25 @@
  * uploads that too, and records the resulting URI. Aborts on any upload
  * failure to avoid shipping broken metadata on-chain.
  *
- * Requires a funded Solana keypair (Irys bills via SOL). Devnet uploads are
- * free up to ~100KB; mainnet uploads cost real SOL.
+ * Requires a funded Solana keypair (Irys L1 bills via SOL — devnet testnet
+ * uses devnet SOL, mainnet uses mainnet-beta SOL).
  *
  * Usage:
  *   bun run upload-assets
  *   bun run scripts/upload-assets.ts [--input DIR] [--output FILE]
- *     [--keypair PATH] [--cluster devnet|mainnet-beta] [--rpc URL]
+ *     [--keypair PATH] [--cluster devnet|mainnet-beta]
  *
  * Defaults: input=./generated/thumbnails, output=./generated/config-lines.json,
- * keypair=~/.config/solana/id.json, cluster=devnet.
+ * keypair=~/.config/solana/id.json, cluster derived from VITE_DEMO.
  *
  * Pipeline: generate-thumbnails -> upload-assets -> create-candy-machine.
  */
 
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { irysUploader } from '@metaplex-foundation/umi-uploader-irys';
-import { createGenericFile, keypairIdentity } from '@metaplex-foundation/umi';
 import { readFile, writeFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
-import { RPC_ENDPOINT } from '../config/env';
-
-// --- Types ---
+import { CLUSTER, IRYS_FUNDING_RPC } from '../config/env';
+import { createIrys, uploadBytes, uploadJson } from './lib/irys-uploader';
 
 interface ThumbnailEntry {
   filename: string;
@@ -51,8 +47,6 @@ interface ConfigLine {
   uri: string;
 }
 
-// --- Constants ---
-
 const COLLECTION_NAME = 'TechTonic';
 const COLLECTION_SYMBOL = 'TONIC';
 const COLLECTION_DESCRIPTION =
@@ -60,17 +54,12 @@ const COLLECTION_DESCRIPTION =
 const DEFAULT_INPUT = './generated/thumbnails';
 const DEFAULT_OUTPUT = './generated/config-lines.json';
 const DEFAULT_KEYPAIR = join(homedir(), '.config/solana/id.json');
-const DEFAULT_CLUSTER = 'devnet';
-const DEFAULT_RPC = RPC_ENDPOINT;
-
-// --- Arg parsing ---
 
 interface Args {
   input: string;
   output: string;
   keypair: string;
   cluster: 'devnet' | 'mainnet-beta';
-  rpc: string;
 }
 
 function parseArgs(): Args {
@@ -79,8 +68,7 @@ function parseArgs(): Args {
     input: DEFAULT_INPUT,
     output: DEFAULT_OUTPUT,
     keypair: DEFAULT_KEYPAIR,
-    cluster: DEFAULT_CLUSTER,
-    rpc: DEFAULT_RPC,
+    cluster: CLUSTER,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -97,48 +85,29 @@ function parseArgs(): Args {
       case '--cluster':
         args.cluster = argv[++i] as Args['cluster'];
         break;
-      case '--rpc':
-        args.rpc = argv[++i];
-        break;
     }
   }
 
   return args;
 }
 
-// --- Main ---
-
 async function main() {
   const args = parseArgs();
-  const rpcUrl =
-    args.rpc ||
-    (args.cluster === 'mainnet-beta'
-      ? 'https://api.mainnet-beta.solana.com'
-      : 'https://api.devnet.solana.com');
 
   console.log('\n=== Asset Uploader ===');
-  console.log(`  Input:   ${args.input}`);
-  console.log(`  Output:  ${args.output}`);
-  console.log(`  Cluster: ${args.cluster}`);
-  console.log(`  RPC:     ${rpcUrl}\n`);
+  console.log(`  Input:         ${args.input}`);
+  console.log(`  Output:        ${args.output}`);
+  console.log(`  Solana:        ${args.cluster}`);
+  console.log(`  Irys:          L1 mainnet (always)\n`);
 
-  // Load keypair
   console.log('Loading keypair...');
   const keypairData = JSON.parse(
     await readFile(resolve(args.keypair), 'utf-8'),
   );
 
-  // Create Umi instance
-  const umi = createUmi(rpcUrl);
-  const keypair = umi.eddsa.createKeypairFromSecretKey(
-    new Uint8Array(keypairData),
-  );
-  umi.use(keypairIdentity(keypair));
-  umi.use(irysUploader());
+  const irys = await createIrys(keypairData, IRYS_FUNDING_RPC);
+  console.log(`  Identity: ${irys.address}\n`);
 
-  console.log(`  Identity: ${keypair.publicKey}\n`);
-
-  // Read thumbnail metadata
   const metadataPath = join(args.input, 'metadata.json');
   const metadata: ThumbnailMetadata = JSON.parse(
     await readFile(metadataPath, 'utf-8'),
@@ -159,24 +128,10 @@ async function main() {
       `[${i + 1}/${metadata.thumbnails.length}] Uploading ${entry.filename}...`,
     );
 
-    // Upload image to Arweave via Irys (retry once on failure)
     const imageBuffer = await readFile(join(args.input, entry.filename));
-    const imageFile = createGenericFile(imageBuffer, entry.filename, {
-      contentType: 'image/png',
-    });
-
-    let imageUri: string | undefined;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const [uri] = await umi.uploader.upload([imageFile]);
-      if (uri) { imageUri = uri; break; }
-      console.warn(`  Image upload returned empty (attempt ${attempt + 1}/2), retrying...`);
-    }
-    if (!imageUri) {
-      throw new Error(`Image upload failed for ${entry.filename} — aborting to prevent broken metadata.`);
-    }
+    const imageUri = await uploadBytes(irys, imageBuffer, entry.filename, 'image/png');
     console.log(`  Image:    ${imageUri}`);
 
-    // Create and upload Metaplex-standard metadata JSON
     const nftMetadata = {
       name: nftName,
       symbol: COLLECTION_SYMBOL,
@@ -190,16 +145,12 @@ async function main() {
       },
     };
 
-    const metadataUri = await umi.uploader.uploadJson(nftMetadata);
-    if (!metadataUri) {
-      throw new Error(`Metadata upload failed for ${nftName} — aborting.`);
-    }
+    const metadataUri = await uploadJson(irys, nftMetadata);
     console.log(`  Metadata: ${metadataUri}\n`);
 
     configLines.push({ name: nftName, uri: metadataUri });
   }
 
-  // Write config lines for Candy Machine creation script
   await writeFile(args.output, JSON.stringify(configLines, null, 2));
   console.log(`Config lines written to ${args.output}`);
   console.log(`Uploaded ${configLines.length}/${metadata.thumbnails.length} items`);

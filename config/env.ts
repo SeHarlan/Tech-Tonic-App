@@ -84,6 +84,15 @@ export const COLLECTION_ADDRESS = DEMO_MODE
 export const MINT_START_TIME =
   import.meta.env.VITE_MINT_START_TIME || undefined;
 
+// Irys L1 uploads always target mainnet. Irys L1 has no testnet, and the
+// SDK's ".devnet()" routes to the deprecated Arweave bundler devnet node
+// which returns a "Hello, Irys!" placeholder on reads. Funding requires
+// real mainnet SOL, but upload costs are trivial (fractions of a cent for
+// typical NFT-sized payloads). The same balance serves devnet-minted and
+// mainnet-minted NFTs since Irys URIs are uniform across chains.
+export const IRYS_FUNDING_RPC =
+  import.meta.env.VITE_MAINNET_RPC_ENDPOINT || DEFAULT_RPC_MAINNET;
+
 // Backend URL for NFT on-chain updates (Hono + Bun on Railway)
 // On native (Android emulator), localhost refers to the device itself —
 // swap to 10.0.2.2 so requests reach the host machine's dev server.

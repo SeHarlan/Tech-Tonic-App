@@ -1,38 +1,40 @@
-// In-memory per-asset rate limiter.
-// Resets on deploy — intentionally simple, fine for this use case.
+// In-memory concurrency mutex — NOT the 7-day rate limit.
+//
+// The real 7-day-per-asset rate limit is enforced against the on-chain
+// metadata JSON's `properties.last_update_at_ms` field (see routes/update-nft.ts
+// and services/metadata.ts). That check is durable across deploys.
+//
+// This file guards only against *concurrent* requests for the same asset
+// racing past the on-chain check before either finishes writing. Entries are
+// cleared on success, failure, and after a short TTL.
 
-const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const MUTEX_TTL_MS = 2 * 60 * 1000; // 2 minutes — longer than a normal upload
 
-const lastUpdate = new Map<string, number>();
+const inFlight = new Map<string, number>();
 
-// Prune stale entries every 10 minutes
+// Prune stale entries every 5 minutes. The route's try/finally releases the
+// mutex after each request; this sweep only bounds the map for assetIds that
+// never come back.
 setInterval(() => {
   const now = Date.now();
-  for (const [key, ts] of lastUpdate) {
-    if (now - ts > COOLDOWN_MS) lastUpdate.delete(key);
+  for (const [key, ts] of inFlight) {
+    if (now - ts > MUTEX_TTL_MS) inFlight.delete(key);
   }
-}, 10 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 /**
- * Check if an asset is rate-limited. Returns the remaining cooldown in ms, or 0 if allowed.
+ * Try to acquire the in-flight mutex for an asset. Returns true on success,
+ * false if another request is already in flight for this asset.
  */
-export function checkRateLimit(assetId: string): number {
-  const last = lastUpdate.get(assetId);
-  if (!last) return 0;
-  const elapsed = Date.now() - last;
-  return elapsed < COOLDOWN_MS ? COOLDOWN_MS - elapsed : 0;
+export function acquireMutex(assetId: string): boolean {
+  const now = Date.now();
+  const existing = inFlight.get(assetId);
+  if (existing && now - existing < MUTEX_TTL_MS) return false;
+  inFlight.set(assetId, now);
+  return true;
 }
 
-/**
- * Record that an asset was updated now.
- */
-export function recordUpdate(assetId: string): void {
-  lastUpdate.set(assetId, Date.now());
-}
-
-/**
- * Clear the rate limit for an asset (used when a request fails before the expensive work).
- */
-export function clearUpdate(assetId: string): void {
-  lastUpdate.delete(assetId);
+/** Release the mutex. Safe to call unconditionally in a finally block. */
+export function releaseMutex(assetId: string): void {
+  inFlight.delete(assetId);
 }

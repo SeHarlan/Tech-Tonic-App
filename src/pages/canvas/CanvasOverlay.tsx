@@ -63,7 +63,7 @@ interface CanvasOverlayProps {
 
 export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, showTouchPrompt, onTransitionChange, needsInitialLoad, isFullscreen = false, rotated = false }: CanvasOverlayProps) {
   const navigate = useNavigate();
-  const { overlayTab, setOverlayTab, hasOwned } = useOverlayWithNfts();
+  const { overlayTab, setOverlayTab, hasOwned, hasDiscover } = useOverlayWithNfts();
   const { ownedNfts, discoverNfts } = useNftStore();
   const { address } = useAccount();
   const umi = useUmi();
@@ -225,6 +225,8 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
   const handleTabChange = useCallback((tab: OverlayTab) => {
     if (tab === activeTab) return;
+    if (tab === 'owned' && !hasOwned) return;
+    if (tab === 'discover' && !hasDiscover) return;
     setOverlayTab(tab);
     triggerGlitch();
     if (!engine) return;
@@ -237,7 +239,20 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     const idx = indexFromId(tabItems, tabId);
     const nft = tabItems[idx];
     if (nft) loadNftIntoEngine(engine, nft, tab === 'discover' ? null : undefined);
-  }, [activeTab, setOverlayTab, triggerGlitch, engine, sketchSeed, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
+  }, [activeTab, hasOwned, hasDiscover, setOverlayTab, triggerGlitch, engine, sketchSeed, ownedNfts, discoverNfts, activeOwnedId, activeDiscoverId]);
+
+  // If the persisted tab becomes disabled (e.g., collection empty or wallet
+  // disconnected), fall back to sketch so the overlay doesn't render a blank
+  // carousel.
+  useEffect(() => {
+    if (activeTab === 'owned' && !hasOwned) {
+      setOverlayTab('sketch');
+      if (engine) loadSketchSeed(engine, sketchSeed);
+    } else if (activeTab === 'discover' && !hasDiscover) {
+      setOverlayTab('sketch');
+      if (engine) loadSketchSeed(engine, sketchSeed);
+    }
+  }, [activeTab, hasOwned, hasDiscover, setOverlayTab, engine, sketchSeed]);
 
   // --- Sketch tab swipe handling ---
   const sketchSwipeStart = useRef<{ x: number } | null>(null);
@@ -255,16 +270,16 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
     const dx = e.clientX - sketchSwipeStart.current.x;
     if (Math.abs(dx) >= SWIPE_THRESHOLD) {
       sketchDidSwipe.current = true;
-      if (dx < 0) {
-        // Swipe left → discover
+      if (dx < 0 && hasDiscover) {
+        // Swipe left → discover (only if available)
         handleTabChange('discover');
-      } else if (hasOwned) {
+      } else if (dx > 0 && hasOwned) {
         // Swipe right → owned (only if available)
         handleTabChange('owned');
       }
     }
     sketchSwipeStart.current = null;
-  }, [handleTabChange, hasOwned]);
+  }, [handleTabChange, hasOwned, hasDiscover]);
 
   // --- Carousel transition state ---
   const [transitionSrc, setTransitionSrc] = useState<string | null>(null);
@@ -378,8 +393,14 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
           <button
             type="button"
+            disabled={!hasDiscover}
             onClick={(e) => { e.stopPropagation(); handleTabChange('discover'); }}
-            className="overlay-tab-btn absolute right-3 top-1/2 -translate-y-1/2 z-4 bg-transparent border-none cursor-pointer text-[rgba(0,255,128,0.5)] hover:text-[rgb(0,255,128)] p-2"
+            className={cn(
+              "overlay-tab-btn absolute right-3 top-1/2 -translate-y-1/2 z-4 bg-transparent border-none p-2",
+              hasDiscover
+                ? "cursor-pointer text-[rgba(0,255,128,0.5)] hover:text-[rgb(0,255,128)]"
+                : "cursor-not-allowed text-[rgba(0,255,128,0.15)]",
+            )}
           >
             <CaretLineRight size={28} weight="bold" />
           </button>
@@ -472,6 +493,7 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
             activeTab={activeTab}
             onTabChange={handleTabChange}
             ownedDisabled={!hasOwned}
+            discoverDisabled={!hasDiscover}
           />
 
           {/* Separator */}
@@ -530,6 +552,6 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
 
 function useOverlayWithNfts() {
   const { overlayTab, setOverlayTab } = useOverlay();
-  const { hasOwned } = useNftStore();
-  return { overlayTab, setOverlayTab, hasOwned };
+  const { hasOwned, hasDiscover } = useNftStore();
+  return { overlayTab, setOverlayTab, hasOwned, hasDiscover };
 }

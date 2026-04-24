@@ -1,43 +1,57 @@
-import { createGenericFile } from '@metaplex-foundation/umi';
-import { umi } from '../lib/umi.ts';
+import { getIrys, gatewayUrl } from '../lib/irys.ts';
 
-/**
- * Retry an async operation once if it returns a falsy value.
- */
+/** Retry an async operation once on empty return or throw, with a small backoff. */
 async function withRetry<T>(
   label: string,
   fn: () => Promise<T | undefined>,
 ): Promise<T> {
+  let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const result = await fn();
-    if (result) return result;
-    console.warn(
-      `[irys] ${label} returned empty (attempt ${attempt + 1}/2), retrying...`,
-    );
+    try {
+      const result = await fn();
+      if (result) return result;
+      console.warn(`[irys] ${label} returned empty (attempt ${attempt + 1}/2)`);
+    } catch (err) {
+      lastErr = err;
+      console.warn(
+        `[irys] ${label} threw (attempt ${attempt + 1}/2): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 750));
   }
-  throw new Error(`Failed to upload ${label} to Arweave`);
+  throw new Error(
+    `Failed to upload ${label} to Irys${lastErr instanceof Error ? `: ${lastErr.message}` : ''}`,
+  );
 }
 
-/**
- * Upload a file to Irys/Arweave with one retry on empty URI.
- */
+/** Upload raw bytes to Irys L1. Returns a full gateway URL. */
 export async function uploadFileWithRetry(
   fileBytes: Uint8Array,
-  filename: string,
+  label: string,
   contentType: string,
 ): Promise<string> {
-  const file = createGenericFile(fileBytes, filename, { contentType });
-  return withRetry(filename, async () => {
-    const [uri] = await umi.uploader.upload([file]);
-    return uri;
+  const irys = await getIrys();
+  const { id } = await withRetry(label, async () => {
+    const receipt = await irys.upload(Buffer.from(fileBytes), {
+      tags: [{ name: 'Content-Type', value: contentType }],
+    });
+    return receipt?.id ? receipt : undefined;
   });
+  return gatewayUrl(id);
 }
 
-/**
- * Upload a metadata JSON object to Irys/Arweave with one retry on empty URI.
- */
+/** Upload a JSON object to Irys L1. Returns a full gateway URL. */
 export async function uploadMetadataJson(
   metadata: Record<string, unknown>,
 ): Promise<string> {
-  return withRetry('metadata JSON', () => umi.uploader.uploadJson(metadata));
+  const irys = await getIrys();
+  const { id } = await withRetry('metadata JSON', async () => {
+    const receipt = await irys.upload(JSON.stringify(metadata), {
+      tags: [{ name: 'Content-Type', value: 'application/json' }],
+    });
+    return receipt?.id ? receipt : undefined;
+  });
+  return gatewayUrl(id);
 }

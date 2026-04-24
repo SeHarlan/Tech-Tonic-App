@@ -6,6 +6,7 @@ interface OverlayTabsProps {
   activeTab: OverlayTab;
   onTabChange: (tab: OverlayTab) => void;
   ownedDisabled: boolean;
+  discoverDisabled: boolean;
 }
 
 const TABS: OverlayTab[] = ['owned', 'sketch', 'discover'];
@@ -16,19 +17,27 @@ const TAB_LABEL: Record<OverlayTab, string> = {
   discover: 'Discover',
 };
 
-export function OverlayTabs({ activeTab, onTabChange, ownedDisabled }: OverlayTabsProps) {
+const DISABLED_TITLE: Record<OverlayTab, string> = {
+  owned: 'No artifacts found in wallet',
+  sketch: '',
+  discover: 'Collection unavailable',
+};
+
+export function OverlayTabs({ activeTab, onTabChange, ownedDisabled, discoverDisabled }: OverlayTabsProps) {
   return (
     <div className="flex items-center justify-center gap-4 font-mono text-xs tracking-[0.15em] uppercase">
       {TABS.map((tab) => {
         const isActive = tab === activeTab;
-        const isDisabled = tab === 'owned' && ownedDisabled;
+        const isDisabled =
+          (tab === 'owned' && ownedDisabled) ||
+          (tab === 'discover' && discoverDisabled);
         return (
           <button
             key={tab}
             type="button"
             disabled={isDisabled}
             onClick={() => onTabChange(tab)}
-            title={isDisabled ? "No artifacts found in wallet" : undefined}
+            title={isDisabled ? DISABLED_TITLE[tab] : undefined}
             className={cn(
               'overlay-tab-btn bg-transparent border-none whitespace-nowrap px-0.5 py-0',
               isDisabled

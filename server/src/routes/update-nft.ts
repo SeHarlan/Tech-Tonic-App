@@ -1,8 +1,12 @@
 import { Hono } from 'hono';
 import { verifySignature } from '../middleware/verify-signature.ts';
-import { checkRateLimit, recordUpdate, clearUpdate } from '../middleware/rate-limit.ts';
+import { acquireMutex, releaseMutex } from '../middleware/rate-limit.ts';
 import { uploadFileWithRetry, uploadMetadataJson } from '../services/irys-upload.ts';
-import { fetchExistingMetadata, buildUpdatedMetadata } from '../services/metadata.ts';
+import {
+  fetchExistingMetadata,
+  buildUpdatedMetadata,
+  cooldownRemaining,
+} from '../services/metadata.ts';
 import { updateAssetUri } from '../services/on-chain-update.ts';
 import { rpcCall } from '../lib/rpc.ts';
 import { COLLECTION_ADDRESS } from '../config.ts';
@@ -97,95 +101,116 @@ route.post('/api/update-nft', async (c) => {
     }
   }
 
-  // 2. Rate limit check — record optimistically to prevent concurrent bypass
-  const cooldownRemaining = checkRateLimit(assetId);
-  if (cooldownRemaining > 0) {
-    const minutes = Math.ceil(cooldownRemaining / 60_000);
-    return c.json(
-      { error: `Update cooldown: try again in ${minutes} minute(s)` },
-      429,
-    );
-  }
-  recordUpdate(assetId);
-
-  // 3. Verify ed25519 signature
-  const sigValid = await verifySignature(walletAddress, signature, message);
-  if (!sigValid) {
-    clearUpdate(assetId);
-    return c.json({ error: 'Signature verification failed' }, 401);
+  if (!acquireMutex(assetId)) {
+    return c.json({ error: 'Another update for this asset is already in progress' }, 429);
   }
 
-  // 4. Verify on-chain ownership + collection membership (also gives us the NFT name)
-  let jsonUri: string;
-  let nftName: string;
   try {
-    const verified = await verifyOwnershipAndCollection(assetId, walletAddress);
-    jsonUri = verified.jsonUri;
-    nftName = verified.name;
-  } catch (err) {
-    clearUpdate(assetId);
-    if (err instanceof Error) {
-      if (err.message === ERR_NOT_OWNER) {
-        return c.json({ error: 'Wallet does not own this asset' }, 403);
-      }
-      if (err.message === ERR_NOT_IN_COLLECTION) {
-        return c.json({ error: 'Asset is not part of this collection' }, 403);
-      }
+    // 3. Verify ed25519 signature
+    const sigValid = await verifySignature(walletAddress, signature, message);
+    if (!sigValid) {
+      return c.json({ error: 'Signature verification failed' }, 401);
     }
-    console.error('[update-nft] Ownership check failed:', err);
-    return c.json({ error: 'Ownership verification failed' }, 500);
-  }
 
-  // 5. Verify signed message matches the exact expected format (using on-chain name)
-  if (message !== expectedMessage(nftName, assetId)) {
-    clearUpdate(assetId);
-    return c.json({ error: 'Signed message does not match expected format' }, 401);
-  }
+    // 4. Verify on-chain ownership + collection membership (also gives us the NFT name)
+    let jsonUri: string;
+    let nftName: string;
+    try {
+      const verified = await verifyOwnershipAndCollection(assetId, walletAddress);
+      jsonUri = verified.jsonUri;
+      nftName = verified.name;
+    } catch (err) {
+      if (err instanceof Error) {
+        if (err.message === ERR_NOT_OWNER) {
+          return c.json({ error: 'Wallet does not own this asset' }, 403);
+        }
+        if (err.message === ERR_NOT_IN_COLLECTION) {
+          return c.json({ error: 'Asset is not part of this collection' }, 403);
+        }
+      }
+      console.error('[update-nft] Ownership check failed:', err);
+      return c.json({ error: 'Ownership verification failed' }, 500);
+    }
 
-  // 5. Upload 3 files to Irys + fetch existing metadata (concurrent — no dependency)
-  let imageUri: string, movementUri: string, paintUri: string;
-  let newMetadataUri: string;
-  try {
-    const [imageBytes, movementBytes, paintBytes] = await Promise.all([
+    // 5. Verify signed message matches the exact expected format (using on-chain name)
+    if (message !== expectedMessage(nftName, assetId)) {
+      return c.json({ error: 'Signed message does not match expected format' }, 401);
+    }
+
+    // 6. Kick off the multipart byte reads now so they run in parallel with
+    // the existing-metadata fetch. If the cooldown check fails, the buffers
+    // are just memory and get discarded.
+    const bytesPromise = Promise.all([
       imageFile.arrayBuffer().then((b) => new Uint8Array(b)),
       movementFile.arrayBuffer().then((b) => new Uint8Array(b)),
       paintFile.arrayBuffer().then((b) => new Uint8Array(b)),
     ]);
+    // Swallow rejections here so an early return doesn't leave an unhandled promise.
+    bytesPromise.catch(() => {});
 
-    const [imgUri, mvUri, ptUri, existing] = await Promise.all([
-      uploadFileWithRetry(imageBytes, 'image.png', 'image/png'),
-      uploadFileWithRetry(movementBytes, 'movement.png', 'image/techtonic-movement'),
-      uploadFileWithRetry(paintBytes, 'paint.png', 'image/techtonic-paint'),
-      fetchExistingMetadata(jsonUri),
-    ]);
-    imageUri = imgUri;
-    movementUri = mvUri;
-    paintUri = ptUri;
+    let existing;
+    try {
+      existing = await fetchExistingMetadata(jsonUri);
+    } catch (err) {
+      console.error('[update-nft] Fetch existing metadata failed:', err);
+      return c.json({ error: 'Failed to fetch existing metadata' }, 500);
+    }
 
-    // 6. Build updated metadata + upload to Irys
-    const newMetadata = buildUpdatedMetadata(existing, imageUri, movementUri, paintUri, walletAddress);
-    newMetadataUri = await uploadMetadataJson(
-      newMetadata as unknown as Record<string, unknown>,
-    );
-  } catch (err) {
-    clearUpdate(assetId);
-    console.error('[update-nft] Upload/metadata failed:', err);
-    return c.json({ error: 'Failed to upload files or build metadata' }, 500);
+    const remaining = cooldownRemaining(existing);
+    if (remaining > 0) {
+      const dayMs = 24 * 60 * 60 * 1000;
+      const humanReadable =
+        remaining >= dayMs
+          ? `${Math.ceil(remaining / dayMs)} day(s)`
+          : `${Math.ceil(remaining / (60 * 60 * 1000))} hour(s)`;
+      return c.json(
+        { error: `Update cooldown: try again in ${humanReadable}`, retryAfterMs: remaining },
+        429,
+      );
+    }
+
+    let imageUri: string, movementUri: string, paintUri: string;
+    let newMetadataUri: string;
+    try {
+      const [imageBytes, movementBytes, paintBytes] = await bytesPromise;
+
+      const [imgUri, mvUri, ptUri] = await Promise.all([
+        uploadFileWithRetry(imageBytes, 'image.png', 'image/png'),
+        uploadFileWithRetry(movementBytes, 'movement.png', 'image/techtonic-movement'),
+        uploadFileWithRetry(paintBytes, 'paint.png', 'image/techtonic-paint'),
+      ]);
+      imageUri = imgUri;
+      movementUri = mvUri;
+      paintUri = ptUri;
+
+      const newMetadata = buildUpdatedMetadata(existing, {
+        imageUri,
+        movementUri,
+        paintUri,
+        walletAddress,
+      });
+      newMetadataUri = await uploadMetadataJson(
+        newMetadata as unknown as Record<string, unknown>,
+      );
+    } catch (err) {
+      console.error('[update-nft] Upload/metadata failed:', err);
+      return c.json({ error: 'Failed to upload files or build metadata' }, 500);
+    }
+
+    // 9. Update on-chain
+    let txSignature: string;
+    try {
+      txSignature = await updateAssetUri(assetId, newMetadataUri);
+    } catch (err) {
+      console.error('[update-nft] On-chain update failed:', err);
+      return c.json({ error: 'On-chain update failed' }, 500);
+    }
+
+    console.log(`[update-nft] Success: asset=${assetId} tx=${txSignature}`);
+    return c.json({ signature: txSignature, newMetadataUri });
+  } finally {
+    releaseMutex(assetId);
   }
-
-  // 7. Update on-chain
-  let txSignature: string;
-  try {
-    txSignature = await updateAssetUri(assetId, newMetadataUri);
-  } catch (err) {
-    clearUpdate(assetId);
-    console.error('[update-nft] On-chain update failed:', err);
-    return c.json({ error: 'On-chain update failed' }, 500);
-  }
-
-  // 8. Return success (rate limit already recorded optimistically in step 2)
-  console.log(`[update-nft] Success: asset=${assetId} tx=${txSignature}`);
-  return c.json({ signature: txSignature, newMetadataUri });
 });
 
 export { route };

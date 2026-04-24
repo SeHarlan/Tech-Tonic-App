@@ -18,6 +18,13 @@ export const RPC_ENDPOINT = DEMO_MODE
   ? required('DEVNET_RPC_ENDPOINT')
   : required('MAINNET_RPC_ENDPOINT');
 
+// Irys L1 uploads always use mainnet; the SDK's devnet path is a deprecated
+// Arweave bundler that returns placeholder content. Funding verification
+// goes against mainnet-beta Solana regardless of DEMO_MODE, so we need a
+// mainnet RPC even when the app is in demo mode.
+export const IRYS_FUNDING_RPC =
+  process.env.MAINNET_RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com';
+
 // Collection address — follows the frontend's dual-address pattern.
 // DEMO_MODE selects between dev collection and Season One (mainnet) collection.
 export const COLLECTION_ADDRESS = DEMO_MODE
@@ -37,4 +44,5 @@ console.log(`[config] DEMO_MODE=${DEMO_MODE}`);
 console.log(`[config] cluster=${DEMO_MODE ? 'devnet' : 'mainnet-beta'}`);
 console.log(`[config] collection=${COLLECTION_ADDRESS}`);
 console.log(`[config] origins=${ALLOWED_ORIGINS.join(', ')}`);
+console.log(`[config] irys=mainnet (funding rpc=${IRYS_FUNDING_RPC.split('?')[0]})`);
 console.log(`[config] port=${PORT}`);
