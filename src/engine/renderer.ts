@@ -41,6 +41,16 @@ const EXTRA_FALL_SHAPE_TIME_MULT = 0.025;
 // Lower = slower edge-contour wobble on move/fall shapes.
 const CONTOUR_TIME_MULT = 0.25;
 
+// Seeds the movement buffer on init and after resets so the sim
+// starts with a preset flow pattern instead of an empty canvas.
+const InitialMovementPattern = {
+  None: 'none',
+  Checkerboard: 'checkerboard',
+  Rings: 'rings',
+} as const;
+type InitialMovementPattern = (typeof InitialMovementPattern)[keyof typeof InitialMovementPattern];
+const INITIAL_MOVEMENT_PATTERN: InitialMovementPattern = InitialMovementPattern.None;
+
 // Noise algorithm used for waterfall + move (left/right) shapes.
 // Swap to compare how each renders the blobby/paint-drip silhouette.
 const ShapeNoiseMode = {
@@ -455,6 +465,7 @@ export function createEngine(config: EngineConfig): Engine {
   rebuildBlockNoiseFBO(params.blockingScale);
   generateNoiseVolume();
   drawing.generateBrushSizeOptions();
+  applyInitialMovementPattern();
 
   // --- Internal Helpers ---
 
@@ -476,9 +487,19 @@ export function createEngine(config: EngineConfig): Engine {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
+  /** Seed the movement buffer with the configured starting pattern (if any). */
+  function applyInitialMovementPattern() {
+    if (INITIAL_MOVEMENT_PATTERN === InitialMovementPattern.Checkerboard) {
+      drawing.applyCheckerboardPattern();
+    } else if (INITIAL_MOVEMENT_PATTERN === InitialMovementPattern.Rings) {
+      drawing.applyRingsPattern();
+    }
+  }
+
   /** Clear all drawing state and reset time. */
   function resetDrawingState() {
     drawing.clearAll();
+    applyInitialMovementPattern();
     waterfallVariant = params.defaultWaterfallMode;
     time = 0;
     totalFrameCount = 0;
@@ -514,6 +535,10 @@ export function createEngine(config: EngineConfig): Engine {
         gl.bindTexture(gl.TEXTURE_2D, drawing.getPaintTexture());
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, blank);
         gl.bindTexture(gl.TEXTURE_2D, null);
+
+        // Re-seed the movement buffer with the starting pattern
+        // after the clear above wiped it.
+        applyInitialMovementPattern();
 
         resolve();
       };

@@ -22,6 +22,18 @@ export interface DrawingManager {
     opts: DrawOpts,
   ): void;
   clearAll(): void;
+  /**
+   * Seed the movement buffer with a thick checkerboard of directional cells.
+   * Horizontal pattern per column: [none, left, none, right] repeating (8 cols total).
+   * Vertical pattern per row:      [none, up,   none, down]  repeating (12 rows total).
+   * R + G channels combine per cell, so a cell can have both horizontal and vertical flow.
+   */
+  applyCheckerboardPattern(): void;
+  /**
+   * Seed the movement buffer with concentric rings from the canvas center.
+   * Each ring gets one randomly chosen direction: left, right, up, or down.
+   */
+  applyRingsPattern(): void;
   getMovementTexture(): WebGLTexture;
   getPaintTexture(): WebGLTexture;
   getMovementFBO(): WebGLFramebuffer;
@@ -424,6 +436,115 @@ export function createDrawingManager(
       gl.clear(gl.COLOR_BUFFER_BIT);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    },
+
+    applyCheckerboardPattern() {
+      const COLS = 16;
+      const ROWS = 9;
+      const cellW = canvasWidth / COLS;
+      const cellH = canvasHeight / ROWS;
+
+      // 0 = nothing, 1 = left,  3 = right
+      const H_PATTERN = [0, 0, 1, 0, 0, 3];
+      // 0 = nothing, 1 = up,    3 = down
+      const V_PATTERN = [0, 0, 1, 0, 0, 3];
+
+      // Byte-encoded to match drawing.ts getMovementColor() float encoding:
+      // R 0.875 (left)  → 223,  R 0.625 (right)        → 159
+      // G 0.925 (wf up) → 236,  G 0.625 (wf down)      → 159
+      const R_LEFT = 223;
+      const R_RIGHT = 159;
+      const G_UP = 236;
+      const G_DOWN = 159;
+
+      const data = new Uint8Array(canvasWidth * canvasHeight * 4);
+
+      // Row (horizontal bar) drives R channel → left/right flow spans full row width.
+      // Col (vertical bar) drives G channel → up/down flow spans full column height.
+      // Where a horizontal bar crosses a vertical bar, both channels combine → diagonal cell.
+      for (let y = 0; y < canvasHeight; y++) {
+        const rowIdx = Math.floor(y / cellH);
+        const hKind = H_PATTERN[rowIdx % H_PATTERN.length];
+        let r = 0;
+        if (hKind === 1) r = R_LEFT;
+        else if (hKind === 3) r = R_RIGHT;
+
+        for (let x = 0; x < canvasWidth; x++) {
+          const colIdx = Math.floor(x / cellW);
+          const vKind = V_PATTERN[colIdx % V_PATTERN.length];
+          let g = 0;
+          if (vKind === 1) g = G_UP;
+          else if (vKind === 3) g = G_DOWN;
+
+          if (r === 0 && g === 0) continue;
+
+          const i = (y * canvasWidth + x) * 4;
+          data[i] = r;
+          data[i + 1] = g;
+          data[i + 2] = 0;
+          data[i + 3] = 255;
+        }
+      }
+
+      gl.bindTexture(gl.TEXTURE_2D, movementTex);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA,
+        canvasWidth, canvasHeight, 0,
+        gl.RGBA, gl.UNSIGNED_BYTE, data,
+      );
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    },
+
+    applyRingsPattern() {
+      const RING_COUNT = 12;
+      const cx = canvasWidth / 2;
+      const cy = canvasHeight / 2;
+      const maxRadius = Math.sqrt(cx * cx + cy * cy);
+      const ringThickness = maxRadius / RING_COUNT;
+
+      const R_LEFT = 223;
+      const R_RIGHT = 159;
+      const G_UP = 236;
+      const G_DOWN = 159;
+
+      // 0=left, 1=right, 2=up, 3=down — picked once per ring
+      const ringDirs: number[] = [];
+      for (let i = 0; i < RING_COUNT; i++) {
+        ringDirs.push(Math.floor(Math.random() * 4));
+      }
+
+      const data = new Uint8Array(canvasWidth * canvasHeight * 4);
+
+      for (let y = 0; y < canvasHeight; y++) {
+        const dy = y - cy;
+        for (let x = 0; x < canvasWidth; x++) {
+          const dx = x - cx;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const ringIdx = Math.min(RING_COUNT - 1, Math.floor(dist / ringThickness));
+          const dir = ringDirs[ringIdx];
+
+          let r = 0;
+          let g = 0;
+          if (dir === 0) r = R_LEFT;
+          else if (dir === 1) r = R_RIGHT;
+          else if (dir === 2) g = G_UP;
+          else g = G_DOWN;
+
+          const i = (y * canvasWidth + x) * 4;
+          data[i] = r;
+          data[i + 1] = g;
+          data[i + 2] = 0;
+          data[i + 3] = 255;
+        }
+      }
+
+      gl.bindTexture(gl.TEXTURE_2D, movementTex);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA,
+        canvasWidth, canvasHeight, 0,
+        gl.RGBA, gl.UNSIGNED_BYTE, data,
+      );
+      gl.bindTexture(gl.TEXTURE_2D, null);
     },
 
     getMovementTexture: () => movementTex,
