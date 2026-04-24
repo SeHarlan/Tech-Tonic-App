@@ -1,3 +1,23 @@
+/**
+ * Generate NFT thumbnail PNGs by running the shader engine in a headless-ish
+ * Chromium. Boots a local Vite server, navigates to `/generate?seed=N` per
+ * seed, waits for the engine to evolve `--duration` seconds of frames, then
+ * captures a screenshot from the WebGL framebuffer. Emits PNGs plus a
+ * `metadata.json` manifest (seed, frame count, NFT attributes) used by
+ * `upload-assets.ts` downstream.
+ *
+ * Usage:
+ *   bun run generate-thumbnails
+ *   bun run scripts/generate-thumbnails.ts [--count N] [--duration SECS]
+ *     [--cooldown SECS] [--output DIR] [--seeds 1,2,3]
+ *
+ * Defaults: count=33, duration=33s, cooldown=5s, output=./generated/thumbnails.
+ * Pass `--seeds` to regenerate specific seeds; otherwise random unique seeds
+ * in [0, 1000) are chosen.
+ *
+ * Pipeline: generate-thumbnails -> upload-assets -> create-candy-machine.
+ */
+
 import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { spawn, type ChildProcess } from 'child_process';
 import { mkdir, writeFile } from 'fs/promises';
@@ -7,8 +27,8 @@ import { randomizeShaderParameters } from '../src/engine/parameters';
 // --- Constants ---
 
 const SEED_MODULUS = 1000;
-const DEFAULT_COUNT = 10;
-const DEFAULT_DURATION_SECS = 60;
+const DEFAULT_COUNT = 33;
+const DEFAULT_DURATION_SECS = 33;
 const DEFAULT_COOLDOWN_SECS = 5;
 const DEFAULT_OUTPUT = './generated/thumbnails';
 const TARGET_FPS = 60;

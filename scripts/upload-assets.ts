@@ -1,3 +1,27 @@
+/**
+ * Upload thumbnail images + Metaplex-standard metadata JSON to Arweave via
+ * Irys, then emit a `config-lines.json` file (name + metadata URI pairs) that
+ * `create-candy-machine.ts` consumes as its config lines input.
+ *
+ * Reads `metadata.json` produced by `generate-thumbnails.ts`, uploads each
+ * PNG, builds the NFT JSON (name, symbol, description, image, attributes),
+ * uploads that too, and records the resulting URI. Aborts on any upload
+ * failure to avoid shipping broken metadata on-chain.
+ *
+ * Requires a funded Solana keypair (Irys bills via SOL). Devnet uploads are
+ * free up to ~100KB; mainnet uploads cost real SOL.
+ *
+ * Usage:
+ *   bun run upload-assets
+ *   bun run scripts/upload-assets.ts [--input DIR] [--output FILE]
+ *     [--keypair PATH] [--cluster devnet|mainnet-beta] [--rpc URL]
+ *
+ * Defaults: input=./generated/thumbnails, output=./generated/config-lines.json,
+ * keypair=~/.config/solana/id.json, cluster=devnet.
+ *
+ * Pipeline: generate-thumbnails -> upload-assets -> create-candy-machine.
+ */
+
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { irysUploader } from '@metaplex-foundation/umi-uploader-irys';
 import { createGenericFile, keypairIdentity } from '@metaplex-foundation/umi';

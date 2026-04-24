@@ -1,3 +1,25 @@
+/**
+ * Smoke-test an existing Candy Machine by minting a single NFT from the CLI.
+ * Reads CM + collection addresses from `generated/candy-machine.json` (or
+ * the `CM_ADDRESS` constant below), fetches on-chain guard state, builds a
+ * correct `mintV1` call for the chosen group, and sends it.
+ *
+ * The `--admin` flag targets the `admin` guard group: it first routes an
+ * allowList proof (using the keypair's wallet) and then mints. Without the
+ * flag, mints through the `public` group (solPayment + mintLimit).
+ *
+ * Useful for verifying a freshly created CM mints end-to-end without going
+ * through the React client. Failures print transaction logs + cause for
+ * quick debugging of guard misconfiguration.
+ *
+ * Usage:
+ *   bun run scripts/test-mint.ts            # public group
+ *   bun run scripts/test-mint.ts --admin    # admin group (allowList)
+ *
+ * Keypair: ~/.config/solana/id.json. Must be in ADMIN_WALLETS for --admin.
+ * Prereq: run create-candy-machine first (or set CM_ADDRESS in source).
+ */
+
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import {
   mplCandyMachine,

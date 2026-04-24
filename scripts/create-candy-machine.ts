@@ -1,3 +1,37 @@
+/**
+ * Create a Metaplex Core Candy Machine (and its Core Collection) on Solana,
+ * wire guards (bot tax, sol payment, admin allowList, optional SKR token
+ * payment on mainnet), then insert the config lines from `upload-assets.ts`.
+ *
+ * Writes `generated/candy-machine.json` with the CM address, collection
+ * address, and metadata. On devnet, prepends `DEMO v{N}` to the collection
+ * name and auto-increments N from the previous run's JSON unless
+ * `--demo-version` is set.
+ *
+ * Guard layout:
+ *   devnet:  admin (allowList) + public (solPayment + mintLimit)
+ *   mainnet: admin + skr (tokenPayment, startDate..endDate window)
+ *            + public (solPayment, startDate = after SKR window ends)
+ * All groups share a bot-tax default guard. Mint timing on mainnet is driven
+ * by MINT_START_TIME + PHASE_DURATION_MS from `config/env`.
+ *
+ * Requires a funded keypair with enough SOL to pay for the CM allocation and
+ * collection creation.
+ *
+ * Usage:
+ *   bun run create-candy-machine -- --collection-image ./path/to/cover.png
+ *   bun run scripts/create-candy-machine.ts --collection-image PATH
+ *     [--config-lines FILE] [--keypair PATH]
+ *     [--cluster devnet|mainnet-beta] [--price SOL] [--rpc URL]
+ *     [--demo-version N]
+ *
+ * Defaults: config-lines=./generated/config-lines.json,
+ * keypair=~/.config/solana/id.json, cluster=devnet, price from env.
+ *
+ * Pipeline: generate-thumbnails -> upload-assets -> create-candy-machine.
+ * After success, paste the printed VITE_* values into your `.env`.
+ */
+
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { irysUploader } from '@metaplex-foundation/umi-uploader-irys';
 import {
