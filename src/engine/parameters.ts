@@ -137,6 +137,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     );
   }
 
+
   // Move parameters
   const shouldMoveThreshold = weightedRandom<number>(
     [

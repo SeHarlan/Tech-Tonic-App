@@ -57,10 +57,11 @@ const INITIAL_MOVEMENT_PATTERN: InitialMovementPattern = InitialMovementPattern.
 // Noise algorithm used for waterfall + move (left/right) shapes.
 // Swap to compare how each renders the blobby/paint-drip silhouette.
 const ShapeNoiseMode = {
-  Current: 0, // existing: trilinear 3D noise volume (C0 — produces sharp grid angles)
-  FbmQuintic: 1, // 4-octave FBM of quintic-smoothed 2D noise (C2 everywhere)
-  Metaballs: 2, // animated metaballs with smooth-min union — roundest blobs
+  // Current: 0, // existing: trilinear 3D noise volume (C0 — produces sharp grid angles)
+  // FbmQuintic: 1, // 4-octave FBM of quintic-smoothed 2D noise (C2 everywhere)
+  // Metaballs: 2, // animated metaballs with smooth-min union — roundest blobs
   StructuralQuintic: 3, // same 3D volume as Current, re-sampled with quintic Hermite (C2) via manual 8-corner texelFetch
+  BlockNoise: 4, // direct read from u_blockNoiseTex (R channel)
 } as const;
 type ShapeNoiseMode = (typeof ShapeNoiseMode)[keyof typeof ShapeNoiseMode];
 const SHAPE_NOISE_MODE: ShapeNoiseMode = ShapeNoiseMode.StructuralQuintic;
@@ -165,6 +166,10 @@ export interface Engine {
   isRunning(): boolean;
 
   loadMovementBuffer(image: HTMLImageElement): void;
+  loadImage(imageUrl: string): Promise<void>;
+
+  setCameraSource(video: HTMLVideoElement | null): void;
+  setCameraEnabled(enabled: boolean): void;
 
   captureScreenshot(): void;
   captureScreenshotBase64(): Promise<string>;
@@ -277,6 +282,9 @@ export function createEngine(config: EngineConfig): Engine {
     noiseVolume: gl.getUniformLocation(mainProg, 'u_noiseVolume'),
     shapeNoiseMode: gl.getUniformLocation(mainProg, 'u_shapeNoiseMode'),
     contourTimeMult: gl.getUniformLocation(mainProg, 'u_contourTimeMult'),
+    cameraTex: gl.getUniformLocation(mainProg, 'u_cameraTex'),
+    useCamera: gl.getUniformLocation(mainProg, 'u_useCamera'),
+    cameraSize: gl.getUniformLocation(mainProg, 'u_cameraSize'),
   };
 
   // --- Display Program ---
@@ -379,6 +387,45 @@ export function createEngine(config: EngineConfig): Engine {
     gl.bindFramebuffer(gl.FRAMEBUFFER, blockNoiseFBOHandle);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, blockNoiseTexture, 0);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  // --- Camera Texture (optional, desktop-only ?camera=1) ---
+
+  let cameraTexture: WebGLTexture | null = null;
+  let cameraVideo: HTMLVideoElement | null = null;
+  let cameraEnabled = false;
+  let cameraWidth = 1;
+  let cameraHeight = 1;
+
+  function ensureCameraTexture(): WebGLTexture {
+    if (cameraTexture) return cameraTexture;
+    cameraTexture = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, cameraTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return cameraTexture;
+  }
+
+  function uploadCameraFrame() {
+    if (!cameraEnabled || !cameraVideo || !cameraTexture) return;
+    if (cameraVideo.readyState < 2 /* HAVE_CURRENT_DATA */) return;
+    const vw = cameraVideo.videoWidth;
+    const vh = cameraVideo.videoHeight;
+    if (!vw || !vh) return;
+
+    gl.bindTexture(gl.TEXTURE_2D, cameraTexture);
+    if (vw !== cameraWidth || vh !== cameraHeight) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cameraVideo);
+      cameraWidth = vw;
+      cameraHeight = vh;
+    } else {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, cameraVideo);
+    }
     gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
@@ -705,6 +752,14 @@ export function createEngine(config: EngineConfig): Engine {
       gl.uniform1i(mainUnif.noiseVolume, 3);
     }
 
+    // Bind camera texture → TEXTURE5 (only meaningful when u_useCamera == 1)
+    uploadCameraFrame();
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, cameraTexture);
+    gl.uniform1i(mainUnif.cameraTex, 5);
+    gl.uniform1f(mainUnif.useCamera, cameraEnabled && cameraVideo ? 1.0 : 0.0);
+    gl.uniform2f(mainUnif.cameraSize, cameraWidth, cameraHeight);
+
     // Bind previous frame → TEXTURE0
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, ppTextures[currentFbIndex]);
@@ -819,6 +874,10 @@ export function createEngine(config: EngineConfig): Engine {
       if (blockNoiseTexture) gl.deleteTexture(blockNoiseTexture);
       if (blockNoiseFBOHandle) gl.deleteFramebuffer(blockNoiseFBOHandle);
       if (noiseVolumeTexture) gl.deleteTexture(noiseVolumeTexture);
+      if (cameraTexture) gl.deleteTexture(cameraTexture);
+      cameraTexture = null;
+      cameraVideo = null;
+      cameraEnabled = false;
       gl.deleteFramebuffer(noiseVolFBO);
       gl.deleteBuffer(vertexBuffer);
       gl.deleteBuffer(texCoordBuffer);
@@ -943,6 +1002,26 @@ export function createEngine(config: EngineConfig): Engine {
       waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
       manualModeFlag = manualMode ?? false;
       isPointerDown = false;
+    },
+
+    loadImage(imageUrl: string) {
+      return loadImageIntoFramebuffers(imageUrl);
+    },
+
+    setCameraSource(video: HTMLVideoElement | null) {
+      cameraVideo = video;
+      if (video) {
+        ensureCameraTexture();
+      } else {
+        cameraEnabled = false;
+        cameraWidth = 1;
+        cameraHeight = 1;
+      }
+    },
+
+    setCameraEnabled(enabled: boolean) {
+      cameraEnabled = enabled;
+      if (enabled) ensureCameraTexture();
     },
 
     loadMovementBuffer(image: HTMLImageElement) {

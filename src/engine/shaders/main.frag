@@ -61,6 +61,9 @@ uniform sampler2D u_blockNoiseTex;
 uniform highp sampler3D u_noiseVolume;
 uniform int u_shapeNoiseMode;
 uniform float u_contourTimeMult;
+uniform sampler2D u_cameraTex;
+uniform float u_useCamera;
+uniform vec2 u_cameraSize;
 
 
 in vec2 v_texCoord;
@@ -129,6 +132,7 @@ float noise(vec2 st) {
 #define SHAPE_NOISE_FBM_QUINTIC 1
 #define SHAPE_NOISE_METABALLS 2
 #define SHAPE_NOISE_STRUCTURAL_QUINTIC 3
+#define SHAPE_NOISE_BLOCK_NOISE 4
 
 // 4-octave fBm of quintic 2D noise, with a small rotation per octave to avoid
 // axis-aligned banding. Output is normalised to ~[0,1].
@@ -206,6 +210,12 @@ float shapeNoise_Metaballs(vec2 p, float t) {
     return clamp(0.5 - d, 0.0, 1.0);
 }
 
+// Direct read from the pre-rendered block noise texture (R channel = wrappingNoise).
+// fract() wraps the time-advanced p back into the [0,1] sample range.
+float shapeNoise_BlockNoise(vec2 p) {
+    return texture(u_blockNoiseTex, fract(1.0 - p)).g;
+}
+
 // Dispatcher — second arg animates the result even when baked into p already.
 float shapeNoise(vec2 p, float t) {
     if (u_shapeNoiseMode == SHAPE_NOISE_FBM_QUINTIC) {
@@ -214,6 +224,8 @@ float shapeNoise(vec2 p, float t) {
         return shapeNoise_Metaballs(p, t);
     } else if (u_shapeNoiseMode == SHAPE_NOISE_STRUCTURAL_QUINTIC) {
         return structuralNoiseQuintic(p, t);
+    } else if (u_shapeNoiseMode == SHAPE_NOISE_BLOCK_NOISE) {
+        return shapeNoise_BlockNoise(p);
     }
     return structuralNoise(p, t);
 }
@@ -340,7 +352,8 @@ void main() {
 
     vec2 moveShapeSt = u_fxWithBlocking ? blockingSt : st;
 
-    moveShapeSt *= u_moveShapeScale;
+    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE)
+      moveShapeSt *= u_moveShapeScale;
 
 
 
@@ -441,7 +454,8 @@ void main() {
 
     //FALL
     vec2 shouldFallSt = u_fxWithBlocking ? blockingSt : st;
-    shouldFallSt *=  u_shouldFallScale;
+    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE)
+      shouldFallSt *= u_shouldFallScale;
 
     float fallContourTime = moveTime * u_fallShapeSpeed * u_contourTimeMult;
     mediump float fallContourNoise = noise(vec2(shouldFallSt.x * .2, -fallContourTime));
@@ -472,7 +486,11 @@ void main() {
 
     vec2 extraMoveShapeSt = u_fxWithBlocking ? blockingSt : st;
     float extraMoveTime = moveTime * u_moveShapeSpeed ;
-    mediump float extraMoveShape = shapeNoise(extraMoveShapeSt * u_extraMoveShapeScale - 1.345 + vec2(extraMoveTime * direction, 0.), extraMoveTime);
+
+    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE)
+      extraMoveShapeSt *= u_extraMoveShapeScale;
+
+    mediump float extraMoveShape = shapeNoise(extraMoveShapeSt - 1.345 + vec2(extraMoveTime * direction, 0.), extraMoveTime);
 
     bool extraMoveStutter = random(floor(st * u_extraMoveStutterScale) + moveTime + 1.49) < u_extraMoveStutterThreshold;
     bool inExtraMove = extraMoveShape < u_extraMoveShapeThreshold;
@@ -491,7 +509,9 @@ void main() {
 
     //EXTRA FALL
     vec2 extraFallShapeSt = u_fxWithBlocking ? blockingSt : st;
-    extraFallShapeSt *= u_extraFallShapeScale;
+    
+    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE)
+      extraFallShapeSt *= u_extraFallShapeScale;
 
     float extraFallTime = moveTime * u_fallShapeSpeed;
 
@@ -647,7 +667,23 @@ void main() {
 
     bool useBlank = (useBlankStatic && !useRibbon) || useBlack;
 
-    if (useBlank) {
+    if (u_useCamera > 0.5) {
+      // Cover-fit camera into canvas, flipping Y (video = top-left, canvas = bottom-left).
+      // Flip X too → mirror the user (selfie-cam convention).
+      vec2 camUV = v_texCoord;
+      camUV.x = 1.0 - camUV.x;
+      camUV.y = 1.0 - camUV.y;
+      float canvasAspect = u_resolution.x / u_resolution.y;
+      float camAspect = u_cameraSize.x / max(u_cameraSize.y, 1.0);
+      if (camAspect > canvasAspect) {
+        float scale = canvasAspect / camAspect;
+        camUV.x = camUV.x * scale + (1.0 - scale) * 0.5;
+      } else {
+        float scale = camAspect / canvasAspect;
+        camUV.y = camUV.y * scale + (1.0 - scale) * 0.5;
+      }
+      initColor = texture(u_cameraTex, clamp(camUV, 0.0, 1.0));
+    } else if (useBlank) {
       initColor = blankColor;
     } else {
 

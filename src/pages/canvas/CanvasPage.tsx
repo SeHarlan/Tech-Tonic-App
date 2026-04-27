@@ -277,6 +277,7 @@ export function CanvasPage() {
   const autostart = searchParams.has('autostart');
   const autoHandTracking = searchParams.has('handtracking');
   const autoFullscreen = searchParams.get('fullscreen') === 'true';
+  const cameraRequested = searchParams.has('camera');
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const menuDrawerRef = useRef<MenuDrawerHandle>(null);
@@ -459,6 +460,55 @@ export function CanvasPage() {
       dm.setDisplayAspectCompensation(1);
     };
   }, [engine, isFullscreen, isOverlayOpen]);
+
+  // Camera feed → engine reset-color source (desktop browser + ?camera=1 only)
+  useEffect(() => {
+    if (!engine || !cameraRequested) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).Capacitor?.isNativePlatform?.()) return;
+    if (!window.matchMedia('(pointer: fine)').matches) return;
+    if (!navigator.mediaDevices?.getUserMedia) return;
+
+    let cancelled = false;
+    const video = document.createElement('video');
+    video.playsInline = true;
+    video.muted = true;
+    video.autoplay = true;
+    let stream: MediaStream | null = null;
+
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        video.srcObject = stream;
+        await new Promise<void>((resolve) => {
+          if (video.readyState >= 1) return resolve();
+          video.addEventListener('loadedmetadata', () => resolve(), { once: true });
+        });
+        if (cancelled) return;
+        await video.play().catch(() => {});
+        if (cancelled) return;
+        engine.setCameraSource(video);
+        engine.setCameraEnabled(true);
+      } catch (err) {
+        console.warn('Camera feed unavailable:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      engine.setCameraEnabled(false);
+      engine.setCameraSource(null);
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      video.srcObject = null;
+    };
+  }, [engine, cameraRequested]);
 
   // Toggle hand tracking with 'h' / fullscreen with 'j' (browser only)
   useEffect(() => {
