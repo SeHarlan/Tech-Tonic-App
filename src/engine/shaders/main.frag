@@ -58,6 +58,8 @@ uniform float u_defaultWaterfallMode;
 uniform sampler2D u_movementTexture;
 uniform sampler2D u_paintTexture;
 uniform sampler2D u_blockNoiseTex;
+uniform sampler2D u_shapeNoiseTex;
+uniform float u_shapeNoiseZoom;
 uniform highp sampler3D u_noiseVolume;
 uniform int u_shapeNoiseMode;
 uniform float u_contourTimeMult;
@@ -210,10 +212,14 @@ float shapeNoise_Metaballs(vec2 p, float t) {
     return clamp(0.5 - d, 0.0, 1.0);
 }
 
-// Direct read from the pre-rendered block noise texture (R channel = wrappingNoise).
-// fract() wraps the time-advanced p back into the [0,1] sample range.
-float shapeNoise_BlockNoise(vec2 p) {
-    return texture(u_blockNoiseTex, fract(1.0 - p)).g;
+// Direct read from the larger 4x shape-noise texture (.a channel = unclamped
+// blackNoise — full [0,1] range). The bake's .g/.b are clamped to [0.3, 0.7]
+// for the blocking-mask threshold logic, which would prevent move/fall noise
+// from ever crossing its trigger thresholds. t slides the UV in noise-space,
+// matching the temporal coupling other modes get from their t arg.
+float shapeNoise_BlockNoise(vec2 p, float t) {
+    vec2 uv = (1.0 - p) * u_shapeNoiseZoom; //+ vec2(t, t * 0.5);
+    return texture(u_shapeNoiseTex, fract(uv)).a;
 }
 
 // Dispatcher — second arg animates the result even when baked into p already.
@@ -225,7 +231,7 @@ float shapeNoise(vec2 p, float t) {
     } else if (u_shapeNoiseMode == SHAPE_NOISE_STRUCTURAL_QUINTIC) {
         return structuralNoiseQuintic(p, t);
     } else if (u_shapeNoiseMode == SHAPE_NOISE_BLOCK_NOISE) {
-        return shapeNoise_BlockNoise(p);
+        return shapeNoise_BlockNoise(p, t);
     }
     return structuralNoise(p, t);
 }
@@ -346,27 +352,29 @@ void main() {
     // Calculate the maximum valid texture coordinate (right/bottom boundary)
     vec2 maxValidCoord = vec2(1.);
 
-    // Determine if this row should move (approximately 20% of rows)
-    // Using a different random seed for each row
-    float shouldMoveThreshold = u_shouldMoveThreshold;
-
     vec2 moveShapeSt = u_fxWithBlocking ? blockingSt : st;
 
-    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE)
+    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE) {
       moveShapeSt *= u_moveShapeScale;
 
-
-
-
-    float moveContourTime = moveTime * u_moveShapeSpeed * u_contourTimeMult;
-    mediump float moveContourNoise = noise(vec2(moveContourTime, moveShapeSt.y * .05));
-    float moveShapeContourMult = 5. + moveContourNoise * 5.;
-    float moveShapeContourStrength = (1.-moveContourNoise) * 0.2;
-    float moveShapeContour = noise(vec2(moveShapeSt.y * moveShapeContourMult, moveContourTime)) * moveShapeContourStrength;
-    moveShapeSt.x += moveShapeContour;
+      float moveContourTime = moveTime * u_moveShapeSpeed * u_contourTimeMult;
+      mediump float moveContourNoise = noise(vec2(moveContourTime, moveShapeSt.y * .05));
+      float moveShapeContourMult = 5. + moveContourNoise * 5.;
+      float moveShapeContourStrength = (1.-moveContourNoise) * 0.2;
+      float moveShapeContour = noise(vec2(moveShapeSt.y * moveShapeContourMult, moveContourTime)) * moveShapeContourStrength;
+      moveShapeSt.x += moveShapeContour;
+    }
 
     float moveShapeTime = moveTime * u_moveShapeSpeed;
-    mediump float moveNoise = shapeNoise(moveShapeSt + vec2(moveShapeTime, 100.), moveShapeTime * 0.25);
+
+    bool moveMovementNoisePatterns = true;
+
+    if(moveMovementNoisePatterns) {
+      //move left/right
+      moveShapeSt += vec2(moveShapeTime, 100.);
+    }
+
+    mediump float moveNoise = shapeNoise(moveShapeSt, moveShapeTime * 0.25);
     float direction = moveNoise < 0.5 ? -1.0 : 1.0;
 
     // Sample drawing buffer at actual pixel position (not block-snapped)
@@ -443,6 +451,15 @@ void main() {
       direction = moveDirectionOverride;
     }
 
+    float shouldMoveThreshold = u_shouldMoveThreshold;
+    float shouldFallThreshold = u_shouldFallThreshold;
+
+    // if (u_shapeNoiseMode == SHAPE_NOISE_BLOCK_NOISE) {
+    //   float blockNoiseShapeThreshAdjust = 0.1;
+    //   shouldMoveThreshold += blockNoiseShapeThreshAdjust;
+    //   shouldFallThreshold += blockNoiseShapeThreshAdjust;
+    // }
+
     bool shouldMove = moveNoise < shouldMoveThreshold || moveNoise > 1. - shouldMoveThreshold;
     shouldMove = shouldMove || moveMode;
 
@@ -454,30 +471,39 @@ void main() {
 
     //FALL
     vec2 shouldFallSt = u_fxWithBlocking ? blockingSt : st;
-    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE)
+
+    if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE) {
       shouldFallSt *= u_shouldFallScale;
 
-    float fallContourTime = moveTime * u_fallShapeSpeed * u_contourTimeMult;
-    mediump float fallContourNoise = noise(vec2(shouldFallSt.x * .2, -fallContourTime));
-    float fallShapeContourMult = 5. + fallContourNoise * 5.;
-    float fallShapeContourStrength = (1. - fallContourNoise) * 0.3;
-    float fallShapeContour = noise(vec2(shouldFallSt.x * fallShapeContourMult, fallContourTime)) * fallShapeContourStrength;
-    shouldFallSt.y += fallShapeContour;
+      float fallContourTime = moveTime * u_fallShapeSpeed * u_contourTimeMult;
+      mediump float fallContourNoise = noise(vec2(shouldFallSt.x * .2, -fallContourTime));
+      float fallShapeContourMult = 5. + fallContourNoise * 5.;
+      float fallShapeContourStrength = (1. - fallContourNoise) * 0.3;
+      float fallShapeContour = noise(vec2(shouldFallSt.x * fallShapeContourMult, fallContourTime)) * fallShapeContourStrength;
+      shouldFallSt.y += fallShapeContour;
+    }
+
     float fallShapeTime = moveTime * u_fallShapeSpeed;
-    mediump float shouldFallNoise  = shapeNoise(
-      shouldFallSt + vec2(20.124, fallShapeTime),
-      fallShapeTime * 0.25);
-    bool shouldFall =  shouldFallNoise  < u_shouldFallThreshold;
+
+    if(moveMovementNoisePatterns) {
+      //move down
+      shouldFallSt += vec2(0.268, fallShapeTime);
+    }
+
+    mediump float shouldFallNoise  = shapeNoise(shouldFallSt, fallShapeTime * 0.25);
+
+
+    bool shouldFall =  shouldFallNoise  < shouldFallThreshold || shouldFallNoise > 1. - shouldFallThreshold;
     shouldFall = shouldFall || waterfallMode || straightFallMode;
 
-    float fallDirection = 1.0;
+    float fallDirection = shouldFallNoise  < 0.5 ? -1.0 : 1.0; //1.0 if hard code down;
     // Override fall direction if vertical brush mode is active
     if (waterfallMode || straightFallMode) {
       fallDirection = fallDirectionOverride;
     }
+      
 
-
-    vec2 resetNoiseSt = (blockingSt + vec2(moveShapeContour, fallShapeContour)) * u_resetNoiseScale;
+    vec2 resetNoiseSt = blockingSt * u_resetNoiseScale;
     mediump float resetNoise = structuralNoise(resetNoiseSt + 678.543, structuralMoveTime);
 
     bool willReset = resetNoise < u_resetThreshold + u_resetThresholdVariance;
@@ -490,7 +516,12 @@ void main() {
     if (u_shapeNoiseMode != SHAPE_NOISE_BLOCK_NOISE)
       extraMoveShapeSt *= u_extraMoveShapeScale;
 
-    mediump float extraMoveShape = shapeNoise(extraMoveShapeSt - 1.345 + vec2(extraMoveTime * direction, 0.), extraMoveTime);
+    if(moveMovementNoisePatterns) {
+      //extra move left/right
+      extraMoveShapeSt += vec2(extraMoveTime * direction, 0.952);
+    }
+
+    mediump float extraMoveShape = shapeNoise(extraMoveShapeSt - 1.345, extraMoveTime);
 
     bool extraMoveStutter = random(floor(st * u_extraMoveStutterScale) + moveTime + 1.49) < u_extraMoveStutterThreshold;
     bool inExtraMove = extraMoveShape < u_extraMoveShapeThreshold;
@@ -515,9 +546,12 @@ void main() {
 
     float extraFallTime = moveTime * u_fallShapeSpeed;
 
-    mediump float extraFallShape = shapeNoise(
-      extraFallShapeSt + 1.123 + vec2(0.2, extraFallTime),
-      extraFallTime * 0.25);
+    if(moveMovementNoisePatterns) {
+      //extra move down
+      extraFallShapeSt += vec2(0.268, extraFallTime);
+    }
+
+    mediump float extraFallShape = shapeNoise(extraFallShapeSt + 1.529, extraFallTime * 0.25);
     bool extraFallStutter = random(floor(st * u_extraFallStutterScale) + moveTime + 2.) < u_extraFallStutterThreshold;
     bool inExtraFall = extraFallShape < u_extraFallShapeThreshold;
     inExtraFall = inExtraFall || trickleMode;
@@ -621,9 +655,6 @@ void main() {
             }
         }
     }
-
-
-    blockingSt = useBlocking ? floor(st * u_blocking) : st;
 
     // Calculate block coordinates and fractional position within block
     vec2 blockFloor = floor(st / blockSize);

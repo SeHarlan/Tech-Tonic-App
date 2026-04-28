@@ -14,6 +14,12 @@ const FIXED_PIXEL_RATIO_UNIFORM = 1.0;
 const DEFAULT_TARGET_FPS = 60;
 const NOISE_VOL_XY = 128;
 const NOISE_VOL_Z = 64;
+// Shape-noise FBO is baked at SHAPE_NOISE_SIZE_MULT × blockingScale so
+// shapeNoise_BlockNoise can shrink shapes up to that factor without tiling.
+// SHAPE_NOISE_ZOOM is the default UV multiplier used when sampling it —
+// 1/SHAPE_NOISE_SIZE_MULT preserves the pre-existing shape size.
+const SHAPE_NOISE_SIZE_MULT = 2;
+const SHAPE_NOISE_ZOOM = 1.0 / SHAPE_NOISE_SIZE_MULT;
 
 // Constants passed to shader but never randomized
 const BASE_CHUNK_SIZE = 160;
@@ -64,7 +70,7 @@ const ShapeNoiseMode = {
   BlockNoise: 4, // direct read from u_blockNoiseTex (R channel)
 } as const;
 type ShapeNoiseMode = (typeof ShapeNoiseMode)[keyof typeof ShapeNoiseMode];
-const SHAPE_NOISE_MODE: ShapeNoiseMode = ShapeNoiseMode.StructuralQuintic;
+const SHAPE_NOISE_MODE: ShapeNoiseMode = ShapeNoiseMode.BlockNoise;
 
 // --- Shader helper ---
 
@@ -279,6 +285,8 @@ export function createEngine(config: EngineConfig): Engine {
     movementTexture: gl.getUniformLocation(mainProg, 'u_movementTexture'),
     paintTexture: gl.getUniformLocation(mainProg, 'u_paintTexture'),
     blockNoiseTex: gl.getUniformLocation(mainProg, 'u_blockNoiseTex'),
+    shapeNoiseTex: gl.getUniformLocation(mainProg, 'u_shapeNoiseTex'),
+    shapeNoiseZoom: gl.getUniformLocation(mainProg, 'u_shapeNoiseZoom'),
     noiseVolume: gl.getUniformLocation(mainProg, 'u_noiseVolume'),
     shapeNoiseMode: gl.getUniformLocation(mainProg, 'u_shapeNoiseMode'),
     contourTimeMult: gl.getUniformLocation(mainProg, 'u_contourTimeMult'),
@@ -370,24 +378,43 @@ export function createEngine(config: EngineConfig): Engine {
   let blockNoiseFBOHandle: WebGLFramebuffer | null = null;
   let blockNoiseSize = 0;
 
+  // Larger sibling FBO baked from the same shader (with u_blocking scaled to
+  // match) so shapeNoise_BlockNoise has headroom to shrink without tiling.
+  let shapeNoiseTexture: WebGLTexture | null = null;
+  let shapeNoiseFBOHandle: WebGLFramebuffer | null = null;
+  let shapeNoiseSize = 0;
+  // REPEAT wrap so fract()-driven UVs in the shader sample seamlessly when
+  // the read crosses the [0,1] boundary.
+  function createBlockNoiseTexture(size: number, wrap: number, filter: number) {
+    const tex = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, size, size, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+    const fbo = gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    return { tex, fbo };
+  }
+
   function rebuildBlockNoiseFBO(bScale: number) {
     blockNoiseSize = Math.max(1, Math.ceil(bScale));
     if (blockNoiseTexture) gl.deleteTexture(blockNoiseTexture);
     if (blockNoiseFBOHandle) gl.deleteFramebuffer(blockNoiseFBOHandle);
+    const { tex, fbo } = createBlockNoiseTexture(blockNoiseSize, gl.CLAMP_TO_EDGE, gl.NEAREST);
+    blockNoiseTexture = tex;
+    blockNoiseFBOHandle = fbo;
 
-    blockNoiseTexture = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, blockNoiseTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, blockNoiseSize, blockNoiseSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    blockNoiseFBOHandle = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, blockNoiseFBOHandle);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, blockNoiseTexture, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    shapeNoiseSize = Math.max(1, blockNoiseSize * SHAPE_NOISE_SIZE_MULT);
+    if (shapeNoiseTexture) gl.deleteTexture(shapeNoiseTexture);
+    if (shapeNoiseFBOHandle) gl.deleteFramebuffer(shapeNoiseFBOHandle);
+    const sn = createBlockNoiseTexture(shapeNoiseSize, gl.REPEAT, gl.LINEAR);
+    shapeNoiseTexture = sn.tex;
+    shapeNoiseFBOHandle = sn.fbo;
   }
 
   // --- Camera Texture (optional, desktop-only ?camera=1) ---
@@ -601,6 +628,7 @@ export function createEngine(config: EngineConfig): Engine {
 
   function renderBlockNoise(structuralMoveTime: number, wrappingTime: number) {
     if (!blockNoiseTexture || !blockNoiseFBOHandle) return;
+    if (!shapeNoiseTexture || !shapeNoiseFBOHandle) return;
 
     // Resize if blockingScale changed
     const neededSize = Math.max(1, Math.ceil(params.blockingScale));
@@ -608,12 +636,9 @@ export function createEngine(config: EngineConfig): Engine {
       rebuildBlockNoiseFBO(params.blockingScale);
     }
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, blockNoiseFBOHandle);
-    gl.viewport(0, 0, blockNoiseSize, blockNoiseSize);
     gl.useProgram(bnProg);
 
     gl.uniform1f(bnUnif.seed, seed);
-    gl.uniform1f(bnUnif.blocking, params.blockingScale);
     gl.uniform2f(bnUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
     gl.uniform1f(bnUnif.structuralMoveTime, structuralMoveTime);
     gl.uniform1f(bnUnif.wrappingTime, wrappingTime);
@@ -633,6 +658,18 @@ export function createEngine(config: EngineConfig): Engine {
     gl.enableVertexAttribArray(bnAttr.texCoord);
     gl.vertexAttribPointer(bnAttr.texCoord, 2, gl.FLOAT, false, 0, 0);
 
+    // Pass 1: small block-noise FBO (pixel == block, used for blocking logic).
+    gl.bindFramebuffer(gl.FRAMEBUFFER, blockNoiseFBOHandle);
+    gl.viewport(0, 0, blockNoiseSize, blockNoiseSize);
+    gl.uniform1f(bnUnif.blocking, params.blockingScale);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // Pass 2: same shader at SHAPE_NOISE_SIZE_MULT × resolution with u_blocking
+    // scaled to match — keeps pixel == block, extending the noise domain
+    // proportionally so the texture contains 4× as many shape periods.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, shapeNoiseFBOHandle);
+    gl.viewport(0, 0, shapeNoiseSize, shapeNoiseSize);
+    gl.uniform1f(bnUnif.blocking, params.blockingScale * SHAPE_NOISE_SIZE_MULT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -744,6 +781,14 @@ export function createEngine(config: EngineConfig): Engine {
       gl.bindTexture(gl.TEXTURE_2D, blockNoiseTexture);
       gl.uniform1i(mainUnif.blockNoiseTex, 2);
     }
+
+    // Bind larger shape-noise texture → TEXTURE6
+    if (shapeNoiseTexture) {
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_2D, shapeNoiseTexture);
+      gl.uniform1i(mainUnif.shapeNoiseTex, 6);
+    }
+    gl.uniform1f(mainUnif.shapeNoiseZoom, SHAPE_NOISE_ZOOM);
 
     // Bind 3D noise volume → TEXTURE3
     if (noiseVolumeTexture) {
@@ -873,6 +918,8 @@ export function createEngine(config: EngineConfig): Engine {
       }
       if (blockNoiseTexture) gl.deleteTexture(blockNoiseTexture);
       if (blockNoiseFBOHandle) gl.deleteFramebuffer(blockNoiseFBOHandle);
+      if (shapeNoiseTexture) gl.deleteTexture(shapeNoiseTexture);
+      if (shapeNoiseFBOHandle) gl.deleteFramebuffer(shapeNoiseFBOHandle);
       if (noiseVolumeTexture) gl.deleteTexture(noiseVolumeTexture);
       if (cameraTexture) gl.deleteTexture(cameraTexture);
       cameraTexture = null;

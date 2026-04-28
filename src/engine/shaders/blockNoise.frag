@@ -104,9 +104,14 @@ void main() {
     // B: ribbonNoise
     float ribbonNoise = structuralNoise(noiseSt + totalOffset - 2000., u_structuralMoveTime);
 
+    // Preserve the unclamped blackNoise in alpha for shape-noise consumers
+    // (the .g/.b clamp below is for the blocking-mask threshold logic and
+    // would never let move/fall noise cross its trigger thresholds).
+    float shapeNoiseValue = blackNoise;
+
     // Balanced fill: compress toward 0.5 and clamp to guarantee mix
     blackNoise = clamp(0.3 + blackNoise * 0.4, 0.3, 0.7);
     ribbonNoise = clamp(0.3 + ribbonNoise * 0.4, 0.3, 0.7);
 
-    fragColor = vec4(wrappingNoise, blackNoise, ribbonNoise, 1.0);
+    fragColor = vec4(wrappingNoise, blackNoise, ribbonNoise, shapeNoiseValue);
 }

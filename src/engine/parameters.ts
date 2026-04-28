@@ -110,6 +110,8 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     rng,
   );
 
+  // const fxWithBlocking = true;
+
   let blockingScale: number;
   if (fxWithBlocking) {
     blockingScale = weightedRandom<number>(
