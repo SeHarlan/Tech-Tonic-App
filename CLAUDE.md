@@ -49,9 +49,3 @@ Two independent deployables with separate dependency trees:
 - **Backend** (`server/`, own `package.json`) — Bun + Hono API → Railway. See `server/CLAUDE.md` for backend-specific rules.
 
 Do not import across boundaries (`server/` ↔ `src/`). Do not install deps in the wrong `package.json`.
-
-## Agent Directives
-- When a task has multiple viable approaches, present 2-3 solution options with brief pros/cons before implementing. For simple, obvious fixes, proceed directly.
-- Ask clarifying questions for user and wait for answers before starting work if the request is ambiguous or if a solution has meaningful tradeoffs.
-- Ask and wait for explicit confirmation from user before: deleting files or large code blocks, rewriting or refactoring more than ~50 lines, or creating new files that change project structure.
-- Ask and wait for explicit confirmation from user before any git operations (commit, push, merge, rebase, branch deletion, etc.).
