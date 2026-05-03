@@ -599,45 +599,15 @@ void main() {
     bool isOutOfXFrame = st.x < 0.0 || st.x > maxValidCoord.x;
     bool isOutOfYFrame = st.y < 0.0 || st.y > maxValidCoord.y;
 
-    bool resetting = true;
-
-    //Allows for wrapping — sample pre-computed block noise (R=wrapping, G=black, B=ribbon)
-    // Use orgSt (pre-movement coordinates) to match original wrappingSt = blockingSt behavior
-    vec2 blockNoiseUV = (floor(orgSt * u_blocking) + 0.5) / u_blocking;
-    vec4 blockNoiseVal = texture(u_blockNoiseTex, blockNoiseUV);
-
-    bool isWrapping = (blockNoiseVal.r < 0.5)
-      ? (direction < 0.)
-      : (direction > 0.);
-
-    isWrapping = isWrapping || moveMode;
-
-    if(isWrapping) {
-      resetting = false;
-    }
-
     bool useReset = false;
 
     if(isOutOfXBounds) {
       if(shouldMove) {
-        if(resetting) {
-          float xSpeed =  (150. * blockSize.x) * moveSpeed;
-
-          if(direction < 0. && st.x < margin.x) {
-              st.x -= xSpeed * moveTime;
-              useReset = true;
-          }
-          if(direction > 0. && st.x > maxValidCoord.x - margin.x) {
-              st.x += xSpeed * moveTime;
-              useReset = true;
-          }
-        } else {
-          if (direction < 0. && st.x < margin.x) {
-              st.x = maxValidCoord.x - st.x;
-          }
-          if (direction > 0. && st.x > maxValidCoord.x - margin.x) {
-              st.x = mod(st.x + margin.x, maxValidCoord.x);
-          }
+        if (direction < 0. && st.x < margin.x) {
+            st.x = maxValidCoord.x - st.x;
+        }
+        if (direction > 0. && st.x > maxValidCoord.x - margin.x) {
+            st.x = mod(st.x + margin.x, maxValidCoord.x);
         }
       }
     }
@@ -664,16 +634,19 @@ void main() {
 
     mediump float blackNoiseEdge = random(st.y + vec2(10.45)) * u_blackNoiseEdgeMult;
 
-    // Sample block noise at post-movement position
-    vec2 blockNoiseUV2 = (blockingSt + 0.5) / u_blocking;
-    vec4 blockNoiseVal2 = texture(u_blockNoiseTex, blockNoiseUV2);
 
-    mediump float blackNoise = blockNoiseVal2.g + blackNoiseEdge;
+    vec2 blockNoiseUV = (blockingSt + 0.5) / u_blocking;
+    vec4 blockNoiseVal = texture(u_blockNoiseTex, blockNoiseUV);
 
+
+    mediump float blackNoise = blockNoiseVal.g + blackNoiseEdge;
     bool useBlack = blackNoise < u_blackNoiseThreshold;
 
-    mediump float ribbonNoise = blockNoiseVal2.b - blackNoiseEdge;
+    mediump float ribbonNoise = blockNoiseVal.b - blackNoiseEdge;
     bool useRibbon = ribbonNoise < u_useRibbonThreshold;
+
+
+    bool horizontalGem = blockNoiseVal.g + blockNoiseVal.b > 1.;
 
     // Apply reset variant overrides (must happen before useBlank calculation)
     if (resetMode) {
@@ -726,10 +699,10 @@ void main() {
 
       vec2 stPlus = ((st) / blockSize);
       if(useBlock) {
-        initColor = createGradientBlock(stPlus, isWrapping);
+        initColor = createGradientBlock(stPlus, horizontalGem);
       } else {
         if (rnd < .25) {
-          initColor = createGradientBlock(stPlus, isWrapping);
+          initColor = createGradientBlock(stPlus, horizontalGem);
         } else if(rnd < .5) {
           initColor = vec4(u_staticColor1, 1.);
         } else if(rnd < 0.75) {

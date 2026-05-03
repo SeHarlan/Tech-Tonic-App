@@ -307,7 +307,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   //   rng,
   // );
 
-  const domainWarpAmount = 10;
+  const domainWarpAmount = 1;
   
 
   // Pattern overlay: geometric patterns mixed with noise (0=none, 1=radial, 2=diagonal, 3=ridged)
