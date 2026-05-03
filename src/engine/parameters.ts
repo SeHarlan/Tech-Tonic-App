@@ -295,17 +295,19 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   // Domain warp: how much the noise boundaries swirl/fold
   // Operates in normalized noise-space, so no blockingScale scaling needed
-  const domainWarpAmount = weightedRandom<number>(
-    [
-      [1.0, 1],
-      [2.0, 2],
-      [3.0, 3],
-      [4.0, 3],
-      [5.0, 2],
-      [6.0, 1],
-    ],
-    rng,
-  );
+  // const domainWarpAmount = weightedRandom<number>(
+  //   [
+  //     [1.0, 1],
+  //     [2.0, 2],
+  //     [3.0, 3],
+  //     [4.0, 3],
+  //     [5.0, 2],
+  //     [6.0, 1],
+  //   ],
+  //   rng,
+  // );
+
+  const domainWarpAmount = 10;
   
 
   // Pattern overlay: geometric patterns mixed with noise (0=none, 1=radial, 2=diagonal, 3=ridged)

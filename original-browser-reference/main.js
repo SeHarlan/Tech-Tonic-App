@@ -3,7 +3,7 @@ const baseChunkSize = 160.; // a constant helps account for pixel density for mo
 
 // Time parameters
 const blockTimeMult = 0.05;
-const structuralTimeMult = 0.01;
+const structuralTimeMult = 100000.01;
 
   // // Blocking parameters
 let blockingScale = 128.0 * 2;
