@@ -770,7 +770,7 @@ void main() {
       useReset = false;
     }
 
-
+useReset = true;
     // Sample from the previous state with the calculated coordinates
     vec4 color = texture(u_texture, st);
     // During the first 0.05 seconds after resize, show the gradient
