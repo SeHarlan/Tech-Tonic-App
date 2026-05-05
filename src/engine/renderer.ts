@@ -295,6 +295,7 @@ export function createEngine(config: EngineConfig): Engine {
     paintTexture: gl.getUniformLocation(mainProg, 'u_paintTexture'),
     blockNoiseTex: gl.getUniformLocation(mainProg, 'u_blockNoiseTex'),
     shapeNoiseTex: gl.getUniformLocation(mainProg, 'u_shapeNoiseTex'),
+    movementShapeTex: gl.getUniformLocation(mainProg, 'u_movementShapeTex'),
     shapeNoiseZoom: gl.getUniformLocation(mainProg, 'u_shapeNoiseZoom'),
     noiseVolume: gl.getUniformLocation(mainProg, 'u_noiseVolume'),
     shapeNoiseMode: gl.getUniformLocation(mainProg, 'u_shapeNoiseMode'),
@@ -884,6 +885,13 @@ export function createEngine(config: EngineConfig): Engine {
       gl.activeTexture(gl.TEXTURE6);
       gl.bindTexture(gl.TEXTURE_2D, shapeNoiseTexture);
       gl.uniform1i(mainUnif.shapeNoiseTex, 6);
+    }
+
+    // Bind block-grid movement mask → TEXTURE7
+    if (movementShapeTexture) {
+      gl.activeTexture(gl.TEXTURE7);
+      gl.bindTexture(gl.TEXTURE_2D, movementShapeTexture);
+      gl.uniform1i(mainUnif.movementShapeTex, 7);
     }
     // Per-block UV stride = (bs/sns)/SHAPE_SIZE_FACTOR. SHAPE_SIZE_FACTOR=1
     // keeps default shape size; <1 shrinks shapes; >1 enlarges them.

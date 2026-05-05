@@ -59,6 +59,7 @@ uniform sampler2D u_movementTexture;
 uniform sampler2D u_paintTexture;
 uniform sampler2D u_blockNoiseTex;
 uniform sampler2D u_shapeNoiseTex;
+uniform sampler2D u_movementShapeTex;
 uniform float u_shapeNoiseZoom;
 uniform highp sampler3D u_noiseVolume;
 uniform int u_shapeNoiseMode;
@@ -344,6 +345,17 @@ void main() {
 
     vec2 blockingSt = useBlocking ? floor(st * u_blocking) : st;
 
+    // Block-grid directional movement mask. Channels: R=left, G=right,
+    // B=up, A=down. Sampled at block-cell center so adjacent pixels in
+    // the same block read identical mask values.
+    vec2 movementMaskUV = (blockingSt + 0.5) / u_blocking;
+    vec4 movementMask = texture(u_movementShapeTex, movementMaskUV);
+
+    float maskHorizontal = movementMask.g - movementMask.r;
+    float maskVertical = movementMask.a - movementMask.b;
+    bool maskMovesHorizontal = abs(maskHorizontal) > 0.5;
+    bool maskMovesVertical = abs(maskVertical) > 0.5;
+
     float blockTime = floor(time * u_blockTimeMult);
 
     float moveTime = time * (u_targetFps / 30.);
@@ -395,7 +407,7 @@ void main() {
     }
 
     mediump float moveNoise = shapeNoise(moveShapeSt, moveShapeTime * 0.25, true);
-    float direction = moveNoise < 0.5 ? -1.0 : 1.0;
+    float direction = maskMovesHorizontal ? sign(maskHorizontal) : (moveNoise < 0.5 ? -1.0 : 1.0);
 
     // Sample drawing buffer at actual pixel position (not block-snapped)
     // This allows sub-block brush sizes while the visual blocking still applies
@@ -480,8 +492,7 @@ void main() {
     //   shouldFallThreshold += blockNoiseShapeThreshAdjust;
     // }
 
-    bool shouldMove = moveNoise < shouldMoveThreshold || moveNoise > 1. - shouldMoveThreshold;
-
+    bool shouldMove = maskMovesHorizontal;
     shouldMove = shouldMove || moveMode;
 
     // Calculate movement offset for the row, if it should move
@@ -520,10 +531,10 @@ void main() {
     mediump float shouldFallNoise  = shapeNoise(shouldFallSt, fallShapeTime * 0.25, false);
 
 
-    bool shouldFall = shouldFallNoise  < shouldFallThreshold || shouldFallNoise > 1. - shouldFallThreshold;
+    bool shouldFall = maskMovesVertical;
     shouldFall = shouldFall || waterfallMode || straightFallMode;
 
-    float fallDirection = shouldFallNoise  < 0.5 ? -1.0 : 1.0; //1.0 if hard code down;
+    float fallDirection = maskMovesVertical ? sign(maskVertical) : (shouldFallNoise < 0.5 ? -1.0 : 1.0);
     // Override fall direction if vertical brush mode is active
     if (waterfallMode || straightFallMode) {
       fallDirection = fallDirectionOverride;
