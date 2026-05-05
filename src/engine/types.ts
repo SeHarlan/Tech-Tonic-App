@@ -26,16 +26,15 @@ export interface ShaderParams {
   fxWithBlocking: boolean;
   blockingScale: number;
   shouldMoveThreshold: number;
-  useMoveBlob: boolean;
   moveShapeSpeed: number;
   moveShapeScale: [number, number];
   shouldFallThreshold: number;
-  useFallBlob: boolean;
   fallShapeSpeed: number;
   shouldFallScale: [number, number];
   fallWaterfallMult: number;
   defaultWaterfallMode: boolean;
   blackNoiseThreshold: number;
+  useRibbonThreshold: number;
   blackNoiseScale: [number, number];
   blackNoiseEdgeMult: number;
   resetThreshold: number;

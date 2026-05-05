@@ -69,28 +69,18 @@ function getShapeScale(
 
 export function getFallShapeScale(
   threshold: number,
-  useFallBlob: boolean,
   fxWithBlocking: boolean,
   blockingScale: number,
 ): [number, number] {
-  const shouldFallBaseScale: [number, number] = useFallBlob
-    ? [10, 8]
-    : [10, 0.5];
-  const blobAdjustment = useFallBlob ? 3 : 1;
-  return getShapeScale(shouldFallBaseScale, threshold, blobAdjustment, fxWithBlocking, blockingScale);
+  return getShapeScale([10, 0.5], threshold, 1, fxWithBlocking, blockingScale);
 }
 
 export function getMoveShapeScale(
   threshold: number,
-  useMoveBlob: boolean,
   fxWithBlocking: boolean,
   blockingScale: number,
 ): [number, number] {
-  const shouldMoveBaseScale: [number, number] = useMoveBlob
-    ? [5, 5]
-    : [0.5, 5];
-  const blobAdjustment = useMoveBlob ? 2 : 1;
-  return getShapeScale(shouldMoveBaseScale, threshold, blobAdjustment, fxWithBlocking, blockingScale);
+  return getShapeScale([0.5, 5], threshold, 1, fxWithBlocking, blockingScale);
 }
 
 // --- Parameter Randomization ---
@@ -98,83 +88,104 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const rngSeed = normalizeSeed(seedValue);
   const rng = createSeededRNG(rngSeed);
 
-  const randomFloat = (min: number, max: number) =>
-    rng() * (max - min) + min;
+  const randomFloat = (min: number, max: number) => rng() * (max - min) + min;
 
   // Blocking parameters
-  const fxWithBlocking = weightedRandom<boolean>(
-    [
-      [true, 1],
-      [false, 9],
-    ],
-    rng,
-  );
+  // const fxWithBlocking = weightedRandom<boolean>(
+  //   [
+  //     [true, 1],
+  //     [false, 4],
+  //   ],
+  //   rng,
+  // );
+  const fxWithBlocking = false;
 
-  // const fxWithBlocking = true;
+  const blockingScale = 64;
 
-  let blockingScale: number;
-  if (fxWithBlocking) {
-    blockingScale = weightedRandom<number>(
-      [
-        [4, 1],
-        [8, 5],
-        [16, 10],
-        [32, 5],
-        [64, 1],
-      ],
-      rng,
-    );
-  } else {
-    blockingScale = weightedRandom<number>(
-      [
-        [8, 1],
-        [16, 2],
-        [32, 5],
-        [64, 10],
-        [128, 5],
-        [256, 2],
-        [512, 1],
-      ],
-      rng,
-    );
-  }
+  // Domain warp: how much the noise boundaries swirl/fold
+  // Operates in normalized noise-space, so no blockingScale scaling needed
+  const domainWarpAmount = 6//3;
+  //   weightedRandom<number>(
+  //   [
+  //     [1.0, 1],
+  //     [2.0, 2],
+  //     [3.0, 3],
+  //     [4.0, 3],
+  //     [5.0, 2],
+  //     [6.0, 1],
+  //   ],
+  //   rng,
+  // );
 
+  // Pattern overlay: geometric patterns mixed with noise (0=none, 1=radial, 2=diagonal, 3=ridged)
+  const patternMode = 0;
+  //   weightedRandom<number>(
+  //   [
+  //     [0, 3],
+  //     [1, 1],
+  //     [2, 1],
+  //     [3, 2],
+  //   ],
+  //   rng,
+  // );
+
+  const patternStrength = patternMode === 0 ? 0 : randomFloat(0.5, 2);
+  const patternFreq = 2//randomFloat(1.0, 4.0);
+
+  const patternCenter = [0.5, 0.5] as [number, number];
+
+  // Corner mirror: how much opposite corners reflect each other
+  const mirrorAmount = 0;
+  //   weightedRandom<number>(
+  //   [
+  //     [0, 6],
+  //     [0.5, 3],
+  //     [1, 1],
+  //   ],
+  //   rng,
+  // );
+  const mirrorAxis = rng() < 0.5 ? 0 : 1; // 0=TL↔BR, 1=TR↔BL
 
   // Move parameters
-  const shouldMoveThreshold = weightedRandom<number>(
-    [
-      [0.1, 1],
-      [0.15, 2],
-      [0.2, 5],
-      [0.25, 2],
-      [0.3, 1],
-    ],
-    rng,
-  );
+  // const shouldMoveThreshold = weightedRandom<number>(
+  //   [
+  //     [0.1, 1],
+  //     [0.15, 2],
+  //     [0.2, 5],
+  //     [0.25, 2],
+  //     [0.3, 1],
+  //   ],
+  //   rng,
+  // );
+  const shouldMoveThreshold = 0.25;
 
-  const useMoveBlob = false//rng() < 0.2;
-  const moveShapeSpeed = useMoveBlob ? 0.03125 : 0.025;
-  const moveShapeScale = getMoveShapeScale(shouldMoveThreshold, useMoveBlob, fxWithBlocking, blockingScale);
+  const moveShapeSpeed = 0.025;
+  const moveShapeScale = getMoveShapeScale(
+    shouldMoveThreshold,
+    fxWithBlocking,
+    blockingScale,
+  );
 
   // Fall parameters
-  const shouldFallThreshold = weightedRandom<number>(
-    [
-      [0.1, 1],
-      [0.15, 2],
-      [0.2, 5],
-      [0.25, 2],
-      [0.3, 1],
-    ],
-    rng,
-  );
+  // const shouldFallThreshold = weightedRandom<number>(
+  //   [
+  //     [0.1, 1],
+  //     [0.15, 2],
+  //     [0.2, 5],
+  //     [0.25, 2],
+  //     [0.3, 1],
+  //   ],
+  //   rng,
+  // );
+  const shouldFallThreshold = shouldMoveThreshold;
 
   const fallWaterfallMult = weightedRandom<number>(
     [
-      [1, 1],
+      // [1, 1],
       [1.25, 2],
       [1.5, 4],
       [1.75, 2],
-      [2, 1],
+      // [2, 1],
     ],
     rng,
   );
@@ -187,9 +198,12 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     rng,
   );
 
-  const useFallBlob = false//rng() < 0.2;
-  const fallShapeSpeed = useFallBlob ? 0.052 : 0.044;
-  const shouldFallScale = getFallShapeScale(shouldFallThreshold, useFallBlob, fxWithBlocking, blockingScale);
+  const fallShapeSpeed = 0.044;
+  const shouldFallScale = getFallShapeScale(
+    shouldFallThreshold,
+    fxWithBlocking,
+    blockingScale,
+  );
 
   // Black noise parameters
   // const blackNoiseThreshold = weightedRandom<number>(
@@ -200,11 +214,14 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   //   ],
   //   rng,
   // );
-  const blackNoiseThreshold = 0.5
-  
+
+  const blackNoiseThreshold = 0.45;
+  const useRibbonThreshold = 0.4;
+
   const blackNoiseBaseScale = [
-    Math.floor(randomFloat(4, 10)),
-    Math.floor(randomFloat(4, 10)),
+    6, 6,
+    // Math.floor(randomFloat(4, 10)),
+    // Math.floor(randomFloat(4, 10)),
   ];
 
   const blackNoiseScale: [number, number] = [
@@ -225,7 +242,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     [
       [0.4, 1],
       [0.45, 2],
-      [0.5, 4],
+      [0.5, 6],
       [0.55, 2],
       [0.6, 1],
     ],
@@ -269,7 +286,6 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   const extraFallShapeScale = getFallShapeScale(
     extraFallShapeThreshold,
-    useFallBlob,
     fxWithBlocking,
     blockingScale,
   ).map((x) => x * 3) as [number, number];
@@ -288,66 +304,18 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   const extraMoveShapeScale = getMoveShapeScale(
     extraMoveShapeThreshold,
-    useMoveBlob,
     fxWithBlocking,
     blockingScale,
   ).map((x) => x * 3) as [number, number];
-
-  // Domain warp: how much the noise boundaries swirl/fold
-  // Operates in normalized noise-space, so no blockingScale scaling needed
-  // const domainWarpAmount = weightedRandom<number>(
-  //   [
-  //     [1.0, 1],
-  //     [2.0, 2],
-  //     [3.0, 3],
-  //     [4.0, 3],
-  //     [5.0, 2],
-  //     [6.0, 1],
-  //   ],
-  //   rng,
-  // );
-
-  const domainWarpAmount = 1;
-  
-
-  // Pattern overlay: geometric patterns mixed with noise (0=none, 1=radial, 2=diagonal, 3=ridged)
-  const patternMode = weightedRandom<number>(
-    [
-      [0, 3],
-      [1, 1],
-      [2, 1],
-      [3, 2],
-    ],
-    rng,
-  );
-
-
-  const patternStrength = patternMode === 0 ? 0 : randomFloat(0.5, 2);
-  const patternFreq = randomFloat(1.0, 4.0);
-
-  const patternCenter = [0.5, 0.5] as [number, number];
-
-  // Corner mirror: how much opposite corners reflect each other
-  const mirrorAmount = weightedRandom<number>(
-    [
-      [0, 6],
-      [0.5, 3],
-      [1, 1],
-    ],
-    rng,
-  );
-  const mirrorAxis = rng() < 0.5 ? 0 : 1; // 0=TL↔BR, 1=TR↔BL
 
   return {
     seed: rngSeed,
     fxWithBlocking,
     blockingScale,
     shouldMoveThreshold,
-    useMoveBlob,
     moveShapeSpeed,
     moveShapeScale,
     shouldFallThreshold,
-    useFallBlob,
     fallShapeSpeed,
     shouldFallScale,
     fallWaterfallMult,
@@ -371,6 +339,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     patternCenter,
     mirrorAmount,
     mirrorAxis,
+    useRibbonThreshold,
   };
 }
 

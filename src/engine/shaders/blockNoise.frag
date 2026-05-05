@@ -9,9 +9,10 @@ uniform float u_seed;
 uniform float u_blocking;
 uniform vec2 u_blackNoiseScale;
 uniform float u_structuralMoveTime;
-uniform float u_wrappingTime;
+uniform float u_movementNoiseTime;
 uniform float u_domainWarpAmount;
 uniform int u_patternMode;       // 0=none, 1=radial, 2=diagonal, 3=ridged
+uniform int u_blockNoiseMode;    // 0=off, 1=on
 uniform float u_patternStrength; // 0-1 blend with noise
 uniform float u_patternFreq;     // repetitions across canvas (1-4)
 uniform vec2 u_patternCenter;    // focal point for patterns (golden ratio positions)
@@ -72,8 +73,7 @@ void main() {
     // Normalized noise coordinates (consistent range ~0-10 regardless of blockingScale)
     vec2 noiseSt = blockingSt * u_blackNoiseScale;
 
-    // R: wrappingNoise (scaled down for wider variation)
-    float wrappingNoise = structuralNoise(noiseSt * 0.25 + 11.909, u_wrappingTime);
+   
 
     // Pattern: compute a geometric bias that offsets noise coordinates
     vec2 patternOffset = vec2(0.0);
@@ -94,24 +94,26 @@ void main() {
     }
 
     // Domain warp
-    float warp = structuralNoise(noiseSt * .5 + 500., u_structuralMoveTime);
+    float warp = structuralNoise(noiseSt * .5 + 500., u_structuralMoveTime * 0.25);
     vec2 warpOffset = vec2(warp) * u_domainWarpAmount;
 
     vec2 totalOffset = warpOffset + patternOffset;
 
-    // G: blackNoise
-    float blackNoise = structuralNoise(noiseSt + totalOffset + 1000., u_structuralMoveTime);
+
+    // G: blackNoise 
+    float blackNoise = structuralNoise(noiseSt + totalOffset, u_structuralMoveTime);
     // B: ribbonNoise
-    float ribbonNoise = structuralNoise(noiseSt + totalOffset - 2000., u_structuralMoveTime);
+    float ribbonNoise = structuralNoise(noiseSt + totalOffset + 111.11, u_structuralMoveTime + 1.11);
 
-    // Preserve the unclamped blackNoise in alpha for shape-noise consumers
-    // (the .g/.b clamp below is for the blocking-mask threshold logic and
-    // would never let move/fall noise cross its trigger thresholds).
-    float shapeNoiseValue = blackNoise;
+    if(u_blockNoiseMode == 0) {
+      fragColor = vec4(0.5, blackNoise, ribbonNoise, 1.);
+      return;
+    }
 
-    // Balanced fill: compress toward 0.5 and clamp to guarantee mix
-    blackNoise = clamp(0.3 + blackNoise * 0.4, 0.3, 0.7);
-    ribbonNoise = clamp(0.3 + ribbonNoise * 0.4, 0.3, 0.7);
+    // R
+    float horizontalMovementNoise = structuralNoise(noiseSt + totalOffset, u_movementNoiseTime + 1.11);
+    // A 
+    float verticalMovementNoise = structuralNoise(noiseSt + totalOffset + 22.22, u_movementNoiseTime);
 
-    fragColor = vec4(wrappingNoise, blackNoise, ribbonNoise, shapeNoiseValue);
+    fragColor = vec4(horizontalMovementNoise, blackNoise, ribbonNoise, verticalMovementNoise);
 }

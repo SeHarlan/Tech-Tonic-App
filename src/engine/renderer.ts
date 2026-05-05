@@ -14,17 +14,27 @@ const FIXED_PIXEL_RATIO_UNIFORM = 1.0;
 const DEFAULT_TARGET_FPS = 60;
 const NOISE_VOL_XY = 128;
 const NOISE_VOL_Z = 64;
-// Shape-noise FBO is baked at SHAPE_NOISE_SIZE_MULT × blockingScale so
-// shapeNoise_BlockNoise can shrink shapes up to that factor without tiling.
-// SHAPE_NOISE_ZOOM is the default UV multiplier used when sampling it —
-// 1/SHAPE_NOISE_SIZE_MULT preserves the pre-existing shape size.
-const SHAPE_NOISE_SIZE_MULT = 2;
-const SHAPE_NOISE_ZOOM = 1.0 / SHAPE_NOISE_SIZE_MULT;
+// Shape-noise FBO is baked at a fixed size, decoupled from blockingScale, so
+// memory/bake cost stay constant and we never blow past GPU MAX_TEXTURE_SIZE.
+// Clamped against gl.MAX_TEXTURE_SIZE at build time and floored at
+// blockingScale so per-block sampling never goes sub-texel.
+// SHAPE_SIZE_FACTOR is the user-facing knob:
+//   1.0  = default shape size (matches the small block-noise bake's frequency)
+//   0.5  = half-size shapes
+//   0.25 = quarter-size, etc.
+// Min usable factor at runtime = blockingScale / shapeNoiseSize (below that
+// the bake tiles via fract() wrap). At SHAPE_NOISE_SIZE=2048 and bs=512 the
+// floor is 0.25 (4× shrink headroom); at bs=64 the floor is 0.03125 (32×).
+const SHAPE_NOISE_SIZE = 2048;
+const SHAPE_SIZE_FACTOR = 2;
 
 // Constants passed to shader but never randomized
 const BASE_CHUNK_SIZE = 160;
 const BLOCK_TIME_MULT = 0.05;
-const STRUCTURAL_TIME_MULT = 0.01;
+
+const STRUCTURAL_TIME_MULT = 0.015;
+const MOVEMENT_NOISE_TIME_MULT = 0.025;
+
 const MOVE_SPEED = 0.0045;
 const RESET_EDGE_THRESHOLD = 0.33;
 const RESET_VARIANCE_AMOUNT = 0.25;
@@ -33,7 +43,6 @@ const RESET_VARIANCE_RATE_SEC = 120;
 // 0.5 = symmetric sine. >0.5 stretches trough, compresses peak.
 const RESET_VARIANCE_TROUGH_DUTY = 0.75;
 const RIBBON_DIRT_THRESHOLD = 0.9;
-const USE_RIBBON_THRESHOLD = 0.45;
 const BLANK_STATIC_TIME_MULT = 2.0;
 const USE_GRAYSCALE = false;
 const BLANK_COLOR: [number, number, number] = [0.11, 0.11, 0.11]
@@ -318,18 +327,19 @@ export function createEngine(config: EngineConfig): Engine {
     texCoord: gl.getAttribLocation(bnProg, 'a_texCoord'),
   };
   const bnUnif = {
-    seed: gl.getUniformLocation(bnProg, 'u_seed'),
-    blocking: gl.getUniformLocation(bnProg, 'u_blocking'),
-    blackNoiseScale: gl.getUniformLocation(bnProg, 'u_blackNoiseScale'),
-    structuralMoveTime: gl.getUniformLocation(bnProg, 'u_structuralMoveTime'),
-    wrappingTime: gl.getUniformLocation(bnProg, 'u_wrappingTime'),
-    domainWarpAmount: gl.getUniformLocation(bnProg, 'u_domainWarpAmount'),
-    patternMode: gl.getUniformLocation(bnProg, 'u_patternMode'),
-    patternStrength: gl.getUniformLocation(bnProg, 'u_patternStrength'),
-    patternFreq: gl.getUniformLocation(bnProg, 'u_patternFreq'),
-    patternCenter: gl.getUniformLocation(bnProg, 'u_patternCenter'),
-    mirrorAmount: gl.getUniformLocation(bnProg, 'u_mirrorAmount'),
-    mirrorAxis: gl.getUniformLocation(bnProg, 'u_mirrorAxis'),
+    seed: gl.getUniformLocation(bnProg, "u_seed"),
+    blocking: gl.getUniformLocation(bnProg, "u_blocking"),
+    blackNoiseScale: gl.getUniformLocation(bnProg, "u_blackNoiseScale"),
+    structuralMoveTime: gl.getUniformLocation(bnProg, "u_structuralMoveTime"),
+    movementNoiseTime: gl.getUniformLocation(bnProg, "u_movementNoiseTime"),
+    domainWarpAmount: gl.getUniformLocation(bnProg, "u_domainWarpAmount"),
+    patternMode: gl.getUniformLocation(bnProg, "u_patternMode"),
+    blockNoiseMode: gl.getUniformLocation(bnProg, "u_blockNoiseMode"),
+    patternStrength: gl.getUniformLocation(bnProg, "u_patternStrength"),
+    patternFreq: gl.getUniformLocation(bnProg, "u_patternFreq"),
+    patternCenter: gl.getUniformLocation(bnProg, "u_patternCenter"),
+    mirrorAmount: gl.getUniformLocation(bnProg, "u_mirrorAmount"),
+    mirrorAxis: gl.getUniformLocation(bnProg, "u_mirrorAxis"),
   };
 
   // --- Noise Volume Program ---
@@ -409,7 +419,10 @@ export function createEngine(config: EngineConfig): Engine {
     blockNoiseTexture = tex;
     blockNoiseFBOHandle = fbo;
 
-    shapeNoiseSize = Math.max(1, blockNoiseSize * SHAPE_NOISE_SIZE_MULT);
+    // Cap shape-noise bake size against GPU max-texture-size, and keep it >=
+    // blockingScale so per-block sampling stride stays >= 1 texel.
+    const maxTexSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    shapeNoiseSize = Math.min(maxTexSize, Math.max(blockNoiseSize, SHAPE_NOISE_SIZE));
     if (shapeNoiseTexture) gl.deleteTexture(shapeNoiseTexture);
     if (shapeNoiseFBOHandle) gl.deleteFramebuffer(shapeNoiseFBOHandle);
     const sn = createBlockNoiseTexture(shapeNoiseSize, gl.REPEAT, gl.LINEAR);
@@ -626,7 +639,7 @@ export function createEngine(config: EngineConfig): Engine {
 
   // --- Block Noise Render ---
 
-  function renderBlockNoise(structuralMoveTime: number, wrappingTime: number) {
+  function renderBlockNoise(structuralMoveTime: number, movementNoiseTime: number) {
     if (!blockNoiseTexture || !blockNoiseFBOHandle) return;
     if (!shapeNoiseTexture || !shapeNoiseFBOHandle) return;
 
@@ -641,9 +654,13 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(bnUnif.seed, seed);
     gl.uniform2f(bnUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
     gl.uniform1f(bnUnif.structuralMoveTime, structuralMoveTime);
-    gl.uniform1f(bnUnif.wrappingTime, wrappingTime);
+    gl.uniform1f(bnUnif.movementNoiseTime, movementNoiseTime);
     gl.uniform1f(bnUnif.domainWarpAmount, params.domainWarpAmount);
     gl.uniform1i(bnUnif.patternMode, params.patternMode);
+    gl.uniform1i(
+      bnUnif.blockNoiseMode,
+      SHAPE_NOISE_MODE === ShapeNoiseMode.BlockNoise ? 1 : 0,
+    );
     gl.uniform1f(bnUnif.patternStrength, params.patternStrength);
     gl.uniform1f(bnUnif.patternFreq, params.patternFreq);
     gl.uniform2f(bnUnif.patternCenter, params.patternCenter[0], params.patternCenter[1]);
@@ -664,12 +681,14 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(bnUnif.blocking, params.blockingScale);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // Pass 2: same shader at SHAPE_NOISE_SIZE_MULT × resolution with u_blocking
-    // scaled to match — keeps pixel == block, extending the noise domain
-    // proportionally so the texture contains 4× as many shape periods.
+    // Pass 2: high-res shape-noise bake. Same blackNoiseScale as pass 1, but
+    // u_blocking = shapeNoiseSize so floor() steps once per texel — the bake
+    // becomes a super-sampled extension of pass 1's noise field, containing
+    // ~(sns/bs) × pass-1 features. Consumer's u_shapeNoiseZoom = bs/sns lifts
+    // exactly the pass-1-equivalent window.
     gl.bindFramebuffer(gl.FRAMEBUFFER, shapeNoiseFBOHandle);
     gl.viewport(0, 0, shapeNoiseSize, shapeNoiseSize);
-    gl.uniform1f(bnUnif.blocking, params.blockingScale * SHAPE_NOISE_SIZE_MULT);
+    gl.uniform1f(bnUnif.blocking, shapeNoiseSize);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -683,7 +702,8 @@ export function createEngine(config: EngineConfig): Engine {
     // Block noise pre-pass
     const moveTime = time * (targetFps / 30);
     const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT;
-    renderBlockNoise(smt, smt * 2);
+    const mnt = manualModeFlag ? 0.0 : moveTime * MOVEMENT_NOISE_TIME_MULT;
+    renderBlockNoise(smt, mnt);
 
     // Main compute pass — render to next framebuffer
     gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[nextFbIndex]);
@@ -711,7 +731,6 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.resetThresholdVariance, resetThresholdVariance);
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
     gl.uniform1f(mainUnif.structuralTimeMult, STRUCTURAL_TIME_MULT);
-    gl.uniform1f(mainUnif.useRibbonThreshold, USE_RIBBON_THRESHOLD);
     gl.uniform1f(mainUnif.ribbonDirtThreshold, RIBBON_DIRT_THRESHOLD);
     gl.uniform1i(mainUnif.useGrayscale, USE_GRAYSCALE ? 1 : 0);
     gl.uniform1i(mainUnif.useColorCycle, USE_COLOR_CYCLE ? 1 : 0);
@@ -756,6 +775,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform2f(mainUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
     gl.uniform1f(mainUnif.blackNoiseEdgeMult, params.blackNoiseEdgeMult);
     gl.uniform1f(mainUnif.blackNoiseThreshold, params.blackNoiseThreshold);
+    gl.uniform1f(mainUnif.useRibbonThreshold, params.useRibbonThreshold);
     gl.uniform2f(mainUnif.dirtNoiseScale, params.dirtNoiseScale[0], params.dirtNoiseScale[1]);
     gl.uniform2f(mainUnif.blankStaticScale, params.blankStaticScale[0], params.blankStaticScale[1]);
 
@@ -788,7 +808,10 @@ export function createEngine(config: EngineConfig): Engine {
       gl.bindTexture(gl.TEXTURE_2D, shapeNoiseTexture);
       gl.uniform1i(mainUnif.shapeNoiseTex, 6);
     }
-    gl.uniform1f(mainUnif.shapeNoiseZoom, SHAPE_NOISE_ZOOM);
+    // Per-block UV stride = (bs/sns)/SHAPE_SIZE_FACTOR. SHAPE_SIZE_FACTOR=1
+    // keeps default shape size; <1 shrinks shapes; >1 enlarges them.
+    // Floor at bs/sns = sub-texel-stride threshold (below that the bake tiles).
+    gl.uniform1f(mainUnif.shapeNoiseZoom, (params.blockingScale / shapeNoiseSize) / SHAPE_SIZE_FACTOR);
 
     // Bind 3D noise volume → TEXTURE3
     if (noiseVolumeTexture) {
