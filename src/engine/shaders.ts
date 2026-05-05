@@ -6,6 +6,7 @@ import displayVert from './shaders/display.vert';
 import displayFrag from './shaders/display.frag';
 import blockNoiseVert from './shaders/blockNoise.vert';
 import blockNoiseFrag from './shaders/blockNoise.frag';
+import movementShapeFrag from './shaders/movementShape.frag';
 import noiseVolumeVert from './shaders/noiseVolume.vert';
 import noiseVolumeFrag from './shaders/noiseVolume.frag';
 
@@ -14,5 +15,6 @@ export {
   drawVert, drawFrag,
   displayVert, displayFrag,
   blockNoiseVert, blockNoiseFrag,
+  movementShapeFrag,
   noiseVolumeVert, noiseVolumeFrag,
 };
