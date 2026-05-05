@@ -9,10 +9,8 @@ uniform float u_seed;
 uniform float u_blocking;
 uniform vec2 u_blackNoiseScale;
 uniform float u_structuralMoveTime;
-uniform float u_movementNoiseTime;
 uniform float u_domainWarpAmount;
 uniform int u_patternMode;       // 0=none, 1=radial, 2=diagonal, 3=ridged
-uniform int u_blockNoiseMode;    // 0=off, 1=on
 uniform float u_patternStrength; // 0-1 blend with noise
 uniform float u_patternFreq;     // repetitions across canvas (1-4)
 uniform vec2 u_patternCenter;    // focal point for patterns (golden ratio positions)
@@ -100,20 +98,10 @@ void main() {
     vec2 totalOffset = warpOffset + patternOffset;
 
 
-    // G: blackNoise 
+    // G: blackNoise
     float blackNoise = structuralNoise(noiseSt + totalOffset, u_structuralMoveTime);
     // B: ribbonNoise
     float ribbonNoise = structuralNoise(noiseSt + totalOffset + 111.11, u_structuralMoveTime + 1.11);
 
-    if(u_blockNoiseMode == 0) {
-      fragColor = vec4(0.5, blackNoise, ribbonNoise, 1.);
-      return;
-    }
-
-    // R
-    float horizontalMovementNoise = structuralNoise(noiseSt + totalOffset, u_movementNoiseTime + 1.11);
-    // A 
-    float verticalMovementNoise = structuralNoise(noiseSt + totalOffset + 22.22, u_movementNoiseTime);
-
-    fragColor = vec4(horizontalMovementNoise, blackNoise, ribbonNoise, verticalMovementNoise);
+    fragColor = vec4(0.0, blackNoise, ribbonNoise, 1.0);
 }

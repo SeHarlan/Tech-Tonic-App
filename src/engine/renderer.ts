@@ -19,8 +19,8 @@ const NOISE_VOL_Z = 64;
 const BASE_CHUNK_SIZE = 160;
 const BLOCK_TIME_MULT = 0.05;
 
-const STRUCTURAL_TIME_MULT = 0.015;
-const MOVEMENT_NOISE_TIME_MULT = 0.025;
+const STRUCTURAL_TIME_MULT = 0.01;
+const MOVEMENT_NOISE_TIME_MULT = 0.02;
 
 const MOVE_SPEED = 0.0045;
 const RESET_EDGE_THRESHOLD = 0.33;
@@ -317,10 +317,8 @@ export function createEngine(config: EngineConfig): Engine {
     blocking: gl.getUniformLocation(bnProg, "u_blocking"),
     blackNoiseScale: gl.getUniformLocation(bnProg, "u_blackNoiseScale"),
     structuralMoveTime: gl.getUniformLocation(bnProg, "u_structuralMoveTime"),
-    movementNoiseTime: gl.getUniformLocation(bnProg, "u_movementNoiseTime"),
     domainWarpAmount: gl.getUniformLocation(bnProg, "u_domainWarpAmount"),
     patternMode: gl.getUniformLocation(bnProg, "u_patternMode"),
-    blockNoiseMode: gl.getUniformLocation(bnProg, "u_blockNoiseMode"),
     patternStrength: gl.getUniformLocation(bnProg, "u_patternStrength"),
     patternFreq: gl.getUniformLocation(bnProg, "u_patternFreq"),
     patternCenter: gl.getUniformLocation(bnProg, "u_patternCenter"),
@@ -648,7 +646,7 @@ export function createEngine(config: EngineConfig): Engine {
 
   // --- Block Noise Render ---
 
-  function renderBlockNoise(structuralMoveTime: number, movementNoiseTime: number) {
+  function renderBlockNoise(structuralMoveTime: number) {
     if (!blockNoiseTexture || !blockNoiseFBOHandle) return;
 
     // Resize if blockingScale changed
@@ -662,13 +660,8 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(bnUnif.seed, seed);
     gl.uniform2f(bnUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
     gl.uniform1f(bnUnif.structuralMoveTime, structuralMoveTime);
-    gl.uniform1f(bnUnif.movementNoiseTime, movementNoiseTime);
     gl.uniform1f(bnUnif.domainWarpAmount, params.domainWarpAmount);
     gl.uniform1i(bnUnif.patternMode, params.patternMode);
-    gl.uniform1i(
-      bnUnif.blockNoiseMode,
-      SHAPE_NOISE_MODE === ShapeNoiseMode.BlockNoise ? 1 : 0,
-    );
     gl.uniform1f(bnUnif.patternStrength, params.patternStrength);
     gl.uniform1f(bnUnif.patternFreq, params.patternFreq);
     gl.uniform2f(bnUnif.patternCenter, params.patternCenter[0], params.patternCenter[1]);
@@ -738,7 +731,7 @@ export function createEngine(config: EngineConfig): Engine {
     const moveTime = time * (targetFps / 30);
     const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT;
     const mnt = manualModeFlag ? 0.0 : moveTime * MOVEMENT_NOISE_TIME_MULT;
-    renderBlockNoise(smt, mnt);
+    renderBlockNoise(smt);
     renderMovementShapeMask(smt, mnt);
 
     // Main compute pass — render to next framebuffer
