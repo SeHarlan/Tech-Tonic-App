@@ -58,9 +58,7 @@ uniform float u_defaultWaterfallMode;
 uniform sampler2D u_movementTexture;
 uniform sampler2D u_paintTexture;
 uniform sampler2D u_blockNoiseTex;
-uniform sampler2D u_shapeNoiseTex;
 uniform sampler2D u_movementShapeTex;
-uniform float u_shapeNoiseZoom;
 uniform highp sampler3D u_noiseVolume;
 uniform int u_shapeNoiseMode;
 uniform float u_contourTimeMult;
@@ -213,25 +211,6 @@ float shapeNoise_Metaballs(vec2 p, float t) {
     return clamp(0.5 - d, 0.0, 1.0);
 }
 
-// Direct read from the larger 4x shape-noise texture (.a channel = unclamped
-// blackNoise — full [0,1] range). The bake's .g/.b are clamped to [0.3, 0.7]
-// for the blocking-mask threshold logic, which would prevent move/fall noise
-// from ever crossing its trigger thresholds. t slides the UV in noise-space,
-// matching the temporal coupling other modes get from their t arg.
-float shapeNoise_BlockNoise(vec2 p, float t, bool isHorizontal) {
-    // p is in 0..1 UV-space (post consumer-side normalization). Sample the
-    // bake at the same spatial position the paint consumer reads, so paint
-    // and shape feature peaks/troughs land in the same screen region.
-    vec2 uv = p * u_shapeNoiseZoom;
-    if(isHorizontal) {
-      //r is horizontal
-      return texture(u_shapeNoiseTex, fract(uv)).r;
-    } else {
-      //a is vertical
-      return texture(u_shapeNoiseTex, fract(uv)).a;
-    }
-}
-
 // Dispatcher — second arg animates the result even when baked into p already.
 float shapeNoise(vec2 p, float t, bool isHorizontal) {
     if (u_shapeNoiseMode == SHAPE_NOISE_FBM_QUINTIC) {
@@ -240,8 +219,6 @@ float shapeNoise(vec2 p, float t, bool isHorizontal) {
         return shapeNoise_Metaballs(p, t);
     } else if (u_shapeNoiseMode == SHAPE_NOISE_STRUCTURAL_QUINTIC) {
         return structuralNoiseQuintic(p, t);
-    } else if (u_shapeNoiseMode == SHAPE_NOISE_BLOCK_NOISE) {
-        return shapeNoise_BlockNoise(p, t, isHorizontal);
     }
     return structuralNoise(p, t);
 }

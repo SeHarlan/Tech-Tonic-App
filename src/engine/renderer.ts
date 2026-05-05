@@ -14,19 +14,6 @@ const FIXED_PIXEL_RATIO_UNIFORM = 1.0;
 const DEFAULT_TARGET_FPS = 60;
 const NOISE_VOL_XY = 128;
 const NOISE_VOL_Z = 64;
-// Shape-noise FBO is baked at a fixed size, decoupled from blockingScale, so
-// memory/bake cost stay constant and we never blow past GPU MAX_TEXTURE_SIZE.
-// Clamped against gl.MAX_TEXTURE_SIZE at build time and floored at
-// blockingScale so per-block sampling never goes sub-texel.
-// SHAPE_SIZE_FACTOR is the user-facing knob:
-//   1.0  = default shape size (matches the small block-noise bake's frequency)
-//   0.5  = half-size shapes
-//   0.25 = quarter-size, etc.
-// Min usable factor at runtime = blockingScale / shapeNoiseSize (below that
-// the bake tiles via fract() wrap). At SHAPE_NOISE_SIZE=2048 and bs=512 the
-// floor is 0.25 (4× shrink headroom); at bs=64 the floor is 0.03125 (32×).
-const SHAPE_NOISE_SIZE = 2048;
-const SHAPE_SIZE_FACTOR = 2;
 
 // Constants passed to shader but never randomized
 const BASE_CHUNK_SIZE = 160;
@@ -294,9 +281,7 @@ export function createEngine(config: EngineConfig): Engine {
     movementTexture: gl.getUniformLocation(mainProg, 'u_movementTexture'),
     paintTexture: gl.getUniformLocation(mainProg, 'u_paintTexture'),
     blockNoiseTex: gl.getUniformLocation(mainProg, 'u_blockNoiseTex'),
-    shapeNoiseTex: gl.getUniformLocation(mainProg, 'u_shapeNoiseTex'),
     movementShapeTex: gl.getUniformLocation(mainProg, 'u_movementShapeTex'),
-    shapeNoiseZoom: gl.getUniformLocation(mainProg, 'u_shapeNoiseZoom'),
     noiseVolume: gl.getUniformLocation(mainProg, 'u_noiseVolume'),
     shapeNoiseMode: gl.getUniformLocation(mainProg, 'u_shapeNoiseMode'),
     contourTimeMult: gl.getUniformLocation(mainProg, 'u_contourTimeMult'),
@@ -415,12 +400,6 @@ export function createEngine(config: EngineConfig): Engine {
   let blockNoiseFBOHandle: WebGLFramebuffer | null = null;
   let blockNoiseSize = 0;
 
-  // Larger sibling FBO baked from the same shader (with u_blocking scaled to
-  // match) so shapeNoise_BlockNoise has headroom to shrink without tiling.
-  let shapeNoiseTexture: WebGLTexture | null = null;
-  let shapeNoiseFBOHandle: WebGLFramebuffer | null = null;
-  let shapeNoiseSize = 0;
-
   // Block-grid directional movement mask (R=left, G=right, B=up, A=down).
   // Sized 1:1 with blockingScale; sampled per block-cell in main.frag.
   let movementShapeTexture: WebGLTexture | null = null;
@@ -458,16 +437,6 @@ export function createEngine(config: EngineConfig): Engine {
     const ms = createBlockNoiseTexture(movementShapeSize, gl.CLAMP_TO_EDGE, gl.NEAREST);
     movementShapeTexture = ms.tex;
     movementShapeFBOHandle = ms.fbo;
-
-    // Cap shape-noise bake size against GPU max-texture-size, and keep it >=
-    // blockingScale so per-block sampling stride stays >= 1 texel.
-    const maxTexSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
-    shapeNoiseSize = Math.min(maxTexSize, Math.max(blockNoiseSize, SHAPE_NOISE_SIZE));
-    if (shapeNoiseTexture) gl.deleteTexture(shapeNoiseTexture);
-    if (shapeNoiseFBOHandle) gl.deleteFramebuffer(shapeNoiseFBOHandle);
-    const sn = createBlockNoiseTexture(shapeNoiseSize, gl.REPEAT, gl.LINEAR);
-    shapeNoiseTexture = sn.tex;
-    shapeNoiseFBOHandle = sn.fbo;
   }
 
   // --- Camera Texture (optional, desktop-only ?camera=1) ---
@@ -681,7 +650,6 @@ export function createEngine(config: EngineConfig): Engine {
 
   function renderBlockNoise(structuralMoveTime: number, movementNoiseTime: number) {
     if (!blockNoiseTexture || !blockNoiseFBOHandle) return;
-    if (!shapeNoiseTexture || !shapeNoiseFBOHandle) return;
 
     // Resize if blockingScale changed
     const neededSize = Math.max(1, Math.ceil(params.blockingScale));
@@ -715,20 +683,10 @@ export function createEngine(config: EngineConfig): Engine {
     gl.enableVertexAttribArray(bnAttr.texCoord);
     gl.vertexAttribPointer(bnAttr.texCoord, 2, gl.FLOAT, false, 0, 0);
 
-    // Pass 1: small block-noise FBO (pixel == block, used for blocking logic).
+    // Small block-noise FBO (pixel == block, used for blocking logic).
     gl.bindFramebuffer(gl.FRAMEBUFFER, blockNoiseFBOHandle);
     gl.viewport(0, 0, blockNoiseSize, blockNoiseSize);
     gl.uniform1f(bnUnif.blocking, params.blockingScale);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-    // Pass 2: high-res shape-noise bake. Same blackNoiseScale as pass 1, but
-    // u_blocking = shapeNoiseSize so floor() steps once per texel — the bake
-    // becomes a super-sampled extension of pass 1's noise field, containing
-    // ~(sns/bs) × pass-1 features. Consumer's u_shapeNoiseZoom = bs/sns lifts
-    // exactly the pass-1-equivalent window.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, shapeNoiseFBOHandle);
-    gl.viewport(0, 0, shapeNoiseSize, shapeNoiseSize);
-    gl.uniform1f(bnUnif.blocking, shapeNoiseSize);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -880,23 +838,12 @@ export function createEngine(config: EngineConfig): Engine {
       gl.uniform1i(mainUnif.blockNoiseTex, 2);
     }
 
-    // Bind larger shape-noise texture → TEXTURE6
-    if (shapeNoiseTexture) {
-      gl.activeTexture(gl.TEXTURE6);
-      gl.bindTexture(gl.TEXTURE_2D, shapeNoiseTexture);
-      gl.uniform1i(mainUnif.shapeNoiseTex, 6);
-    }
-
     // Bind block-grid movement mask → TEXTURE7
     if (movementShapeTexture) {
       gl.activeTexture(gl.TEXTURE7);
       gl.bindTexture(gl.TEXTURE_2D, movementShapeTexture);
       gl.uniform1i(mainUnif.movementShapeTex, 7);
     }
-    // Per-block UV stride = (bs/sns)/SHAPE_SIZE_FACTOR. SHAPE_SIZE_FACTOR=1
-    // keeps default shape size; <1 shrinks shapes; >1 enlarges them.
-    // Floor at bs/sns = sub-texel-stride threshold (below that the bake tiles).
-    gl.uniform1f(mainUnif.shapeNoiseZoom, (params.blockingScale / shapeNoiseSize) / SHAPE_SIZE_FACTOR);
 
     // Bind 3D noise volume → TEXTURE3
     if (noiseVolumeTexture) {
@@ -1027,8 +974,6 @@ export function createEngine(config: EngineConfig): Engine {
       }
       if (blockNoiseTexture) gl.deleteTexture(blockNoiseTexture);
       if (blockNoiseFBOHandle) gl.deleteFramebuffer(blockNoiseFBOHandle);
-      if (shapeNoiseTexture) gl.deleteTexture(shapeNoiseTexture);
-      if (shapeNoiseFBOHandle) gl.deleteFramebuffer(shapeNoiseFBOHandle);
       if (movementShapeTexture) gl.deleteTexture(movementShapeTexture);
       if (movementShapeFBOHandle) gl.deleteFramebuffer(movementShapeFBOHandle);
       if (noiseVolumeTexture) gl.deleteTexture(noiseVolumeTexture);
