@@ -1,5 +1,5 @@
 import type { EngineConfig, EngineState, ShaderParams, DrawMode, Direction, EraseVariant } from './types';
-import { mainVert, mainFrag, displayVert, displayFrag, blockNoiseVert, blockNoiseFrag, noiseVolumeVert, noiseVolumeFrag } from './shaders';
+import { mainVert, mainFrag, displayVert, displayFrag, blockNoiseVert, blockNoiseFrag, movementShapeFrag, noiseVolumeVert, noiseVolumeFrag } from './shaders';
 import { randomizeShaderParameters, normalizeSeed, SEED_MODULUS } from './parameters';
 import { createDrawingManager, type DrawingManager } from './drawing';
 import { captureScreenshot, captureScreenshotBase64, createVideoRecorder } from './recording';
@@ -342,6 +342,32 @@ export function createEngine(config: EngineConfig): Engine {
     mirrorAxis: gl.getUniformLocation(bnProg, "u_mirrorAxis"),
   };
 
+  // --- Movement Shape Program ---
+
+  const msProg = linkProgram(gl, blockNoiseVert, movementShapeFrag);
+  if (!msProg) throw new Error('Failed to create movement shape program');
+
+  const msAttr = {
+    position: gl.getAttribLocation(msProg, 'a_position'),
+    texCoord: gl.getAttribLocation(msProg, 'a_texCoord'),
+  };
+  const msUnif = {
+    seed: gl.getUniformLocation(msProg, 'u_seed'),
+    blocking: gl.getUniformLocation(msProg, 'u_blocking'),
+    blackNoiseScale: gl.getUniformLocation(msProg, 'u_blackNoiseScale'),
+    structuralMoveTime: gl.getUniformLocation(msProg, 'u_structuralMoveTime'),
+    movementNoiseTime: gl.getUniformLocation(msProg, 'u_movementNoiseTime'),
+    domainWarpAmount: gl.getUniformLocation(msProg, 'u_domainWarpAmount'),
+    patternMode: gl.getUniformLocation(msProg, 'u_patternMode'),
+    patternStrength: gl.getUniformLocation(msProg, 'u_patternStrength'),
+    patternFreq: gl.getUniformLocation(msProg, 'u_patternFreq'),
+    patternCenter: gl.getUniformLocation(msProg, 'u_patternCenter'),
+    mirrorAmount: gl.getUniformLocation(msProg, 'u_mirrorAmount'),
+    mirrorAxis: gl.getUniformLocation(msProg, 'u_mirrorAxis'),
+    moveThreshold: gl.getUniformLocation(msProg, 'u_moveThreshold'),
+    fallThreshold: gl.getUniformLocation(msProg, 'u_fallThreshold'),
+  };
+
   // --- Noise Volume Program ---
 
   const nvProg = linkProgram(gl, noiseVolumeVert, noiseVolumeFrag);
@@ -393,6 +419,12 @@ export function createEngine(config: EngineConfig): Engine {
   let shapeNoiseTexture: WebGLTexture | null = null;
   let shapeNoiseFBOHandle: WebGLFramebuffer | null = null;
   let shapeNoiseSize = 0;
+
+  // Block-grid directional movement mask (R=left, G=right, B=up, A=down).
+  // Sized 1:1 with blockingScale; sampled per block-cell in main.frag.
+  let movementShapeTexture: WebGLTexture | null = null;
+  let movementShapeFBOHandle: WebGLFramebuffer | null = null;
+  let movementShapeSize = 0;
   // REPEAT wrap so fract()-driven UVs in the shader sample seamlessly when
   // the read crosses the [0,1] boundary.
   function createBlockNoiseTexture(size: number, wrap: number, filter: number) {
@@ -418,6 +450,13 @@ export function createEngine(config: EngineConfig): Engine {
     const { tex, fbo } = createBlockNoiseTexture(blockNoiseSize, gl.CLAMP_TO_EDGE, gl.NEAREST);
     blockNoiseTexture = tex;
     blockNoiseFBOHandle = fbo;
+
+    movementShapeSize = blockNoiseSize;
+    if (movementShapeTexture) gl.deleteTexture(movementShapeTexture);
+    if (movementShapeFBOHandle) gl.deleteFramebuffer(movementShapeFBOHandle);
+    const ms = createBlockNoiseTexture(movementShapeSize, gl.CLAMP_TO_EDGE, gl.NEAREST);
+    movementShapeTexture = ms.tex;
+    movementShapeFBOHandle = ms.fbo;
 
     // Cap shape-noise bake size against GPU max-texture-size, and keep it >=
     // blockingScale so per-block sampling stride stays >= 1 texel.
@@ -694,6 +733,43 @@ export function createEngine(config: EngineConfig): Engine {
     gl.viewport(0, 0, canvas.width, canvas.height);
   }
 
+  // --- Movement Shape Mask Render ---
+
+  function renderMovementShapeMask(structuralMoveTime: number, movementNoiseTime: number) {
+    if (!movementShapeTexture || !movementShapeFBOHandle) return;
+
+    gl.useProgram(msProg);
+
+    gl.uniform1f(msUnif.seed, seed);
+    gl.uniform1f(msUnif.blocking, params.blockingScale);
+    gl.uniform2f(msUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
+    gl.uniform1f(msUnif.structuralMoveTime, structuralMoveTime);
+    gl.uniform1f(msUnif.movementNoiseTime, movementNoiseTime);
+    gl.uniform1f(msUnif.domainWarpAmount, params.domainWarpAmount);
+    gl.uniform1i(msUnif.patternMode, params.patternMode);
+    gl.uniform1f(msUnif.patternStrength, params.patternStrength);
+    gl.uniform1f(msUnif.patternFreq, params.patternFreq);
+    gl.uniform2f(msUnif.patternCenter, params.patternCenter[0], params.patternCenter[1]);
+    gl.uniform1f(msUnif.mirrorAmount, params.mirrorAmount);
+    gl.uniform1i(msUnif.mirrorAxis, params.mirrorAxis);
+    gl.uniform1f(msUnif.moveThreshold, 0.33);
+    gl.uniform1f(msUnif.fallThreshold, 0.33);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.enableVertexAttribArray(msAttr.position);
+    gl.vertexAttribPointer(msAttr.position, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.enableVertexAttribArray(msAttr.texCoord);
+    gl.vertexAttribPointer(msAttr.texCoord, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, movementShapeFBOHandle);
+    gl.viewport(0, 0, movementShapeSize, movementShapeSize);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+
   // --- Render ---
 
   function render() {
@@ -704,6 +780,7 @@ export function createEngine(config: EngineConfig): Engine {
     const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT;
     const mnt = manualModeFlag ? 0.0 : moveTime * MOVEMENT_NOISE_TIME_MULT;
     renderBlockNoise(smt, mnt);
+    renderMovementShapeMask(smt, mnt);
 
     // Main compute pass — render to next framebuffer
     gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[nextFbIndex]);
@@ -934,6 +1011,7 @@ export function createEngine(config: EngineConfig): Engine {
       gl.deleteProgram(mainProg);
       gl.deleteProgram(dispProg);
       gl.deleteProgram(bnProg);
+      gl.deleteProgram(msProg);
       gl.deleteProgram(nvProg);
       for (let i = 0; i < 2; i++) {
         gl.deleteTexture(ppTextures[i]);
@@ -943,6 +1021,8 @@ export function createEngine(config: EngineConfig): Engine {
       if (blockNoiseFBOHandle) gl.deleteFramebuffer(blockNoiseFBOHandle);
       if (shapeNoiseTexture) gl.deleteTexture(shapeNoiseTexture);
       if (shapeNoiseFBOHandle) gl.deleteFramebuffer(shapeNoiseFBOHandle);
+      if (movementShapeTexture) gl.deleteTexture(movementShapeTexture);
+      if (movementShapeFBOHandle) gl.deleteFramebuffer(movementShapeFBOHandle);
       if (noiseVolumeTexture) gl.deleteTexture(noiseVolumeTexture);
       if (cameraTexture) gl.deleteTexture(cameraTexture);
       cameraTexture = null;
