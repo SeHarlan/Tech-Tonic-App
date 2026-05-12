@@ -38,7 +38,7 @@ export interface ShaderParams {
   blackNoiseScale: [number, number];
   blackNoiseEdgeMult: number;
   resetThreshold: number;
-  resetNoiseScale: [number, number];
+  // resetNoiseScale: [number, number];
   dirtNoiseScale: [number, number];
   blankStaticScale: [number, number];
   blankStaticThreshold: number;
@@ -53,6 +53,7 @@ export interface ShaderParams {
   patternCenter: [number, number];
   mirrorAmount: number;
   mirrorAxis: number;
+  movementShapeScaling: [number, number];
 }
 
 // --- Drawing Types ---

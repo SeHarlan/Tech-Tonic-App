@@ -28,7 +28,7 @@ import { randomizeShaderParameters } from '../src/engine/parameters';
 
 const SEED_MODULUS = 1000;
 const DEFAULT_COUNT = 11;
-const DEFAULT_DURATION_SECS = 45;
+const DEFAULT_DURATION_SECS = 120;
 const DEFAULT_COOLDOWN_SECS = 5; 
 const DEFAULT_OUTPUT = './generated/thumbnails';
 const TARGET_FPS = 60;

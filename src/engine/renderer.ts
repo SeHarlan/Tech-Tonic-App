@@ -17,20 +17,44 @@ const NOISE_VOL_Z = 64;
 
 // Constants passed to shader but never randomized
 const BASE_CHUNK_SIZE = 160;
-const BLOCK_TIME_MULT = 0.05;
+const BLOCK_TIME_MULT = 1.1;
 
-const STRUCTURAL_TIME_MULT = 0.01;
-const MOVEMENT_NOISE_TIME_MULT = 0.02;
+const STRUCTURAL_TIME_MULT = 0.0025; //structural z axis ( and reset)
+const RESET_NOISE_TIME_MULT = 5.0; //reset noise z drift relative to structural time
 
-const MOVE_SPEED = 0.0045;
+const MOVEMENT_NOISE_TIME_MULT = 0.008;//z axis for baked movement noise
+const MOVEMENT_NOISE_X_TIME_MULT = 0.013  * 0.5;//horizontal movement-mask drift speed (TODO, needs dynamic multiply by movementShapeScaling)
+const MOVEMENT_NOISE_Y_TIME_MULT = MOVEMENT_NOISE_X_TIME_MULT * (FIXED_CANVAS_WIDTH / FIXED_CANVAS_HEIGHT);//vertical drift speed
+// Movement masks are rendered at blockingScale resolution. A full inverse scale
+// over-corrects coarse masks, so use a softer perceptual compensation curve.
+const MOVEMENT_MASK_REFERENCE_SCALE = 512; // blockScale where XY speed is unchanged
+const MOVEMENT_MASK_SCALE_EXPONENT = 0.; // 0=no scaling, 1=full inverse blockScale scaling
+
+const MOVE_SPEED = 0.0045; //pixel movement
 const RESET_EDGE_THRESHOLD = 0.33;
-const RESET_VARIANCE_AMOUNT = 0.25;
+
+const RESET_VARIANCE_AMOUNT = 0//.2; TODO re-enable
 const RESET_VARIANCE_RATE_SEC = 120;
-// Fraction of period spent in the trough (least-reset) half.
+
+const MOVEMENT_THRESHOLD_VARIANCE_AMOUNT = 0//.15; TODO re-enable
+
+//line up the lowest point of reset variance with the movement variance at neutral leading to low
+//1.0 - THRESHOLD_VARIANCE_START_PHASE (0.375) = 0.625
+//RESET_VARIANCE_RATE_SEC (120)  / 0.625
+const MOVEMENT_THRESHOLD_VARIANCE_RATE_SEC = 192;
+
+// 0.0 starts neutral; 0.375 starts low; 0.5 starts neutral; 0.875 starts high.
+//remember to change DEFAULT_DURATION_SECS  accordingly for the thumbnails to line up with the lowest point
+const THRESHOLD_VARIANCE_START_PHASE = 0.375;
+// Scales only the positive/high side. 1.0 = unchanged, 0.5 = half-height highs.
+const THRESHOLD_VARIANCE_HIGH_SCALE = 0.25;
+// Fraction of period spent in the trough (low-threshold) half.
 // 0.5 = symmetric sine. >0.5 stretches trough, compresses peak.
-const RESET_VARIANCE_TROUGH_DUTY = 0.75;
+const RESET_VARIANCE_TROUGH_DUTY = 0.75; 
+
+
 const RIBBON_DIRT_THRESHOLD = 0.9;
-const BLANK_STATIC_TIME_MULT = 2.0;
+const BLANK_STATIC_TIME_MULT = 5.0;
 const USE_GRAYSCALE = false;
 const BLANK_COLOR: [number, number, number] = [0.11, 0.11, 0.11]
 const STATIC_COLOR_1: [number, number, number] = [1, 0, 0];
@@ -44,7 +68,7 @@ const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
 const EXTRA_MOVE_STUTTER_THRESHOLD = 0.1;
 const EXTRA_FALL_SHAPE_TIME_MULT = 0.025;
 // Lower = slower edge-contour wobble on move/fall shapes.
-const CONTOUR_TIME_MULT = 0.25;
+const CONTOUR_TIME_MULT = 0.2;
 
 // Seeds the movement buffer on init and after resets so the sim
 // starts with a preset flow pattern instead of an empty canvas.
@@ -241,6 +265,7 @@ export function createEngine(config: EngineConfig): Engine {
     resetEdgeThreshold: gl.getUniformLocation(mainProg, 'u_resetEdgeThreshold'),
     resetNoiseScale: gl.getUniformLocation(mainProg, 'u_resetNoiseScale'),
     resetThresholdVariance: gl.getUniformLocation(mainProg, 'u_resetThresholdVariance'),
+    movementThresholdVariance: gl.getUniformLocation(mainProg, 'u_movementThresholdVariance'),
     shouldFallThreshold: gl.getUniformLocation(mainProg, 'u_shouldFallThreshold'),
     shouldFallScale: gl.getUniformLocation(mainProg, 'u_shouldFallScale'),
     fallShapeSpeed: gl.getUniformLocation(mainProg, 'u_fallShapeSpeed'),
@@ -317,6 +342,7 @@ export function createEngine(config: EngineConfig): Engine {
     blocking: gl.getUniformLocation(bnProg, "u_blocking"),
     blackNoiseScale: gl.getUniformLocation(bnProg, "u_blackNoiseScale"),
     structuralMoveTime: gl.getUniformLocation(bnProg, "u_structuralMoveTime"),
+    resetNoiseTimeMult: gl.getUniformLocation(bnProg, "u_resetNoiseTimeMult"),
     domainWarpAmount: gl.getUniformLocation(bnProg, "u_domainWarpAmount"),
     patternMode: gl.getUniformLocation(bnProg, "u_patternMode"),
     patternStrength: gl.getUniformLocation(bnProg, "u_patternStrength"),
@@ -341,6 +367,7 @@ export function createEngine(config: EngineConfig): Engine {
     blackNoiseScale: gl.getUniformLocation(msProg, 'u_blackNoiseScale'),
     structuralMoveTime: gl.getUniformLocation(msProg, 'u_structuralMoveTime'),
     movementNoiseTime: gl.getUniformLocation(msProg, 'u_movementNoiseTime'),
+    movementNoiseXYTime: gl.getUniformLocation(msProg, 'u_movementNoiseXYTime'),
     domainWarpAmount: gl.getUniformLocation(msProg, 'u_domainWarpAmount'),
     patternMode: gl.getUniformLocation(msProg, 'u_patternMode'),
     patternStrength: gl.getUniformLocation(msProg, 'u_patternStrength'),
@@ -348,8 +375,7 @@ export function createEngine(config: EngineConfig): Engine {
     patternCenter: gl.getUniformLocation(msProg, 'u_patternCenter'),
     mirrorAmount: gl.getUniformLocation(msProg, 'u_mirrorAmount'),
     mirrorAxis: gl.getUniformLocation(msProg, 'u_mirrorAxis'),
-    moveThreshold: gl.getUniformLocation(msProg, 'u_moveThreshold'),
-    fallThreshold: gl.getUniformLocation(msProg, 'u_fallThreshold'),
+    movementShapeScaling: gl.getUniformLocation(msProg, 'u_movementShapeScaling'),
   };
 
   // --- Noise Volume Program ---
@@ -660,6 +686,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(bnUnif.seed, seed);
     gl.uniform2f(bnUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
     gl.uniform1f(bnUnif.structuralMoveTime, structuralMoveTime);
+    gl.uniform1f(bnUnif.resetNoiseTimeMult, RESET_NOISE_TIME_MULT);
     gl.uniform1f(bnUnif.domainWarpAmount, params.domainWarpAmount);
     gl.uniform1i(bnUnif.patternMode, params.patternMode);
     gl.uniform1f(bnUnif.patternStrength, params.patternStrength);
@@ -687,7 +714,11 @@ export function createEngine(config: EngineConfig): Engine {
 
   // --- Movement Shape Mask Render ---
 
-  function renderMovementShapeMask(structuralMoveTime: number, movementNoiseTime: number) {
+  function renderMovementShapeMask(
+    structuralMoveTime: number,
+    movementNoiseTime: number,
+    movementNoiseXYTime: [number, number],
+  ) {
     if (!movementShapeTexture || !movementShapeFBOHandle) return;
 
     gl.useProgram(msProg);
@@ -697,6 +728,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform2f(msUnif.blackNoiseScale, params.blackNoiseScale[0], params.blackNoiseScale[1]);
     gl.uniform1f(msUnif.structuralMoveTime, structuralMoveTime);
     gl.uniform1f(msUnif.movementNoiseTime, movementNoiseTime);
+    gl.uniform2f(msUnif.movementNoiseXYTime, movementNoiseXYTime[0], movementNoiseXYTime[1]);
     gl.uniform1f(msUnif.domainWarpAmount, params.domainWarpAmount);
     gl.uniform1i(msUnif.patternMode, params.patternMode);
     gl.uniform1f(msUnif.patternStrength, params.patternStrength);
@@ -704,8 +736,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform2f(msUnif.patternCenter, params.patternCenter[0], params.patternCenter[1]);
     gl.uniform1f(msUnif.mirrorAmount, params.mirrorAmount);
     gl.uniform1i(msUnif.mirrorAxis, params.mirrorAxis);
-    gl.uniform1f(msUnif.moveThreshold, 0.33);
-    gl.uniform1f(msUnif.fallThreshold, 0.33);
+    gl.uniform2f(msUnif.movementShapeScaling, params.movementShapeScaling[0], params.movementShapeScaling[1]);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.enableVertexAttribArray(msAttr.position);
@@ -724,15 +755,42 @@ export function createEngine(config: EngineConfig): Engine {
 
   // --- Render ---
 
+  function thresholdVariance(timeSec: number, periodSec: number, amount: number): number {
+    const cyclePos = ((timeSec / periodSec + THRESHOLD_VARIANCE_START_PHASE) % 1 + 1) % 1;
+    const duty = RESET_VARIANCE_TROUGH_DUTY;
+    const variancePhase = cyclePos < duty
+      ? (Math.PI * cyclePos) / duty
+      : Math.PI + (Math.PI * (cyclePos - duty)) / (1 - duty);
+    const variance = -Math.sin(variancePhase) * amount;
+    return variance > 0.0 ? variance * THRESHOLD_VARIANCE_HIGH_SCALE : variance;
+  }
+
+  function movementMaskXYTime(moveTime: number, blockingScale: number): [number, number] {
+    const scaleRatio = MOVEMENT_MASK_REFERENCE_SCALE / Math.max(1, blockingScale);
+    const scaleCompensation = Math.pow(scaleRatio, MOVEMENT_MASK_SCALE_EXPONENT);
+    return [
+      moveTime * MOVEMENT_NOISE_X_TIME_MULT * scaleCompensation,
+      moveTime * MOVEMENT_NOISE_Y_TIME_MULT * scaleCompensation,
+    ];
+  }
+
   function render() {
     const nextFbIndex = (currentFbIndex + 1) % 2;
+
+    // Manual mode: zero out autonomous thresholds.
+    const effMove = manualModeFlag ? 0.0 : params.shouldMoveThreshold;
+    const effFall = manualModeFlag ? 0.0 : params.shouldFallThreshold;
+    const effReset = manualModeFlag ? 0.0 : params.resetThreshold;
+    const effExtraFall = manualModeFlag ? 0.0 : params.extraFallShapeThreshold;
+    const effExtraMove = manualModeFlag ? 0.0 : params.extraMoveShapeThreshold;
 
     // Block noise pre-pass
     const moveTime = time * (targetFps / 30);
     const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT;
     const mnt = manualModeFlag ? 0.0 : moveTime * MOVEMENT_NOISE_TIME_MULT;
+    const mnxyt = manualModeFlag ? [0.0, 0.0] as [number, number] : movementMaskXYTime(moveTime, params.blockingScale);
     renderBlockNoise(smt);
-    renderMovementShapeMask(smt, mnt);
+    renderMovementShapeMask(smt, mnt, mnxyt);
 
     // Main compute pass — render to next framebuffer
     gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[nextFbIndex]);
@@ -751,13 +809,13 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.baseChunkSize, BASE_CHUNK_SIZE);
     gl.uniform1f(mainUnif.moveSpeed, MOVE_SPEED);
     gl.uniform1f(mainUnif.resetEdgeThreshold, RESET_EDGE_THRESHOLD);
-    const cyclePos = ((time / RESET_VARIANCE_RATE_SEC) % 1 + 1) % 1;
-    const duty = RESET_VARIANCE_TROUGH_DUTY;
-    const variancePhase = cyclePos < duty
-      ? (Math.PI * cyclePos) / duty
-      : Math.PI + (Math.PI * (cyclePos - duty)) / (1 - duty);
-    const resetThresholdVariance = -Math.sin(variancePhase) * RESET_VARIANCE_AMOUNT;
+    const resetThresholdVariance = thresholdVariance(time, RESET_VARIANCE_RATE_SEC, RESET_VARIANCE_AMOUNT);
+    const movementThresholdVariance = manualModeFlag
+      ? 0.0
+      : thresholdVariance(time, MOVEMENT_THRESHOLD_VARIANCE_RATE_SEC, MOVEMENT_THRESHOLD_VARIANCE_AMOUNT);
+
     gl.uniform1f(mainUnif.resetThresholdVariance, resetThresholdVariance);
+    gl.uniform1f(mainUnif.movementThresholdVariance, movementThresholdVariance);
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
     gl.uniform1f(mainUnif.structuralTimeMult, STRUCTURAL_TIME_MULT);
     gl.uniform1f(mainUnif.ribbonDirtThreshold, RIBBON_DIRT_THRESHOLD);
@@ -778,19 +836,12 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1i(mainUnif.shapeNoiseMode, SHAPE_NOISE_MODE);
     gl.uniform1f(mainUnif.contourTimeMult, CONTOUR_TIME_MULT);
 
-    // Manual mode: zero out autonomous thresholds
-    const effMove = manualModeFlag ? 0.0 : params.shouldMoveThreshold;
-    const effFall = manualModeFlag ? 0.0 : params.shouldFallThreshold;
-    const effReset = manualModeFlag ? 0.0 : params.resetThreshold;
-    const effExtraFall = manualModeFlag ? 0.0 : params.extraFallShapeThreshold;
-    const effExtraMove = manualModeFlag ? 0.0 : params.extraMoveShapeThreshold;
-
     // Seed-derived params
     gl.uniform1f(mainUnif.shouldMoveThreshold, effMove);
     gl.uniform2f(mainUnif.moveShapeScale, params.moveShapeScale[0], params.moveShapeScale[1]);
     gl.uniform1f(mainUnif.moveShapeSpeed, params.moveShapeSpeed);
     gl.uniform1f(mainUnif.resetThreshold, effReset);
-    gl.uniform2f(mainUnif.resetNoiseScale, params.resetNoiseScale[0], params.resetNoiseScale[1]);
+    // gl.uniform2f(mainUnif.resetNoiseScale, params.resetNoiseScale[0], params.resetNoiseScale[1]);
     gl.uniform1f(mainUnif.shouldFallThreshold, effFall);
     gl.uniform2f(mainUnif.shouldFallScale, params.shouldFallScale[0], params.shouldFallScale[1]);
     gl.uniform1f(mainUnif.fallShapeSpeed, params.fallShapeSpeed);

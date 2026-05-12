@@ -1,4 +1,7 @@
-import { useMemo, useCallback, useEffect, useState, useRef, type PointerEvent as RPointerEvent, type MouseEvent as RMouseEvent, type ChangeEvent as RChangeEvent } from 'react';
+import {
+  useMemo, useCallback, useEffect, useState, useRef, type PointerEvent as RPointerEvent,
+  // type MouseEvent as RMouseEvent, type ChangeEvent as RChangeEvent
+} from 'react';
 import { useAtom } from 'jotai';
 import { useAccount } from '@solana/connector';
 import { MenuButton } from '../../components/ui/MenuButton';
@@ -7,7 +10,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '../../utils/ui-helpers';
 import { OverlayTabs, type OverlayTab } from './OverlayTabs';
 import { NftBrowser, loadNftIntoEngine, loadNftIntoEngineAsync, loadSketchSeed } from './NftBrowser';
-import { XIcon, CaretLineLeft, CaretLineRight, ShuffleIcon, FloppyDiskIcon, CircleNotchIcon, ImageSquareIcon } from '@phosphor-icons/react';
+import { XIcon, CaretLineLeft, CaretLineRight, ShuffleIcon, FloppyDiskIcon, CircleNotchIcon } from '@phosphor-icons/react';
 import { SaveDialog } from './SaveDialog';
 import { useNftStore } from '../../hooks/useNftStore';
 import { useOverlay } from '../../hooks/useOverlay';
@@ -90,28 +93,28 @@ export function CanvasOverlay({ canvasBottom: _canvasBottom, engine, onClose, sh
   const isBrowsing = activeTab !== 'sketch' && browserItems.length > 0;
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
+  // const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUploadClick = useCallback((e: RMouseEvent) => {
-    e.stopPropagation();
-    uploadInputRef.current?.click();
-  }, []);
+  // const handleUploadClick = useCallback((e: RMouseEvent) => {
+  //   e.stopPropagation();
+  //   uploadInputRef.current?.click();
+  // }, []);
 
-  const handleUploadChange = useCallback(async (e: RChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !engine) return;
-    const url = URL.createObjectURL(file);
-    try {
-      await engine.loadImage(url);
-      console.log('[Upload] Image loaded into draft framebuffer');
-      onClose();
-    } catch (err) {
-      console.warn('[Upload] Failed to load image into engine:', err);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }, [engine, onClose]);
+  // const handleUploadChange = useCallback(async (e: RChangeEvent<HTMLInputElement>) => {
+  //   const file = e.target.files?.[0];
+  //   e.target.value = '';
+  //   if (!file || !engine) return;
+  //   const url = URL.createObjectURL(file);
+  //   try {
+  //     await engine.loadImage(url);
+  //     console.log('[Upload] Image loaded into draft framebuffer');
+  //     onClose();
+  //   } catch (err) {
+  //     console.warn('[Upload] Failed to load image into engine:', err);
+  //   } finally {
+  //     URL.revokeObjectURL(url);
+  //   }
+  // }, [engine, onClose]);
 
   // --- On-chain update ---
   const [updateBusy, setUpdateBusy] = useState(false);

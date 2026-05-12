@@ -34,3 +34,6 @@ generated-demo/
 
 # Generated thumbnails (local only)
 public/thumbnails/
+
+
+.review/
