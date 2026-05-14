@@ -15,8 +15,6 @@ uniform int u_patternMode;       // 0=none, 1=radial, 2=diagonal, 3=ridged
 uniform float u_patternStrength; // 0-1 blend with noise
 uniform float u_patternFreq;     // repetitions across canvas (1-4)
 uniform vec2 u_patternCenter;    // focal point for patterns (golden ratio positions)
-uniform float u_mirrorAmount;    // TODO deprecated, clean all mirror related stuff up
-uniform int u_mirrorAxis;        // 0=TL↔BR, 1=TR↔BL
 
 in vec2 v_texCoord;
 out vec4 fragColor;

@@ -16,8 +16,6 @@ uniform int u_patternMode;
 uniform float u_patternStrength;
 uniform float u_patternFreq;
 uniform vec2 u_patternCenter;
-uniform float u_mirrorAmount;
-uniform int u_mirrorAxis;
 uniform vec2 u_movementShapeScaling;
 
 in vec2 v_texCoord;

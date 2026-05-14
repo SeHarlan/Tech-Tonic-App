@@ -341,8 +341,6 @@ export function createEngine(config: EngineConfig): Engine {
     patternStrength: gl.getUniformLocation(bnProg, "u_patternStrength"),
     patternFreq: gl.getUniformLocation(bnProg, "u_patternFreq"),
     patternCenter: gl.getUniformLocation(bnProg, "u_patternCenter"),
-    mirrorAmount: gl.getUniformLocation(bnProg, "u_mirrorAmount"),
-    mirrorAxis: gl.getUniformLocation(bnProg, "u_mirrorAxis"),
   };
 
   // --- Movement Shape Program ---
@@ -366,8 +364,6 @@ export function createEngine(config: EngineConfig): Engine {
     patternStrength: gl.getUniformLocation(msProg, 'u_patternStrength'),
     patternFreq: gl.getUniformLocation(msProg, 'u_patternFreq'),
     patternCenter: gl.getUniformLocation(msProg, 'u_patternCenter'),
-    mirrorAmount: gl.getUniformLocation(msProg, 'u_mirrorAmount'),
-    mirrorAxis: gl.getUniformLocation(msProg, 'u_mirrorAxis'),
     movementShapeScaling: gl.getUniformLocation(msProg, 'u_movementShapeScaling'),
   };
 
@@ -685,8 +681,6 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(bnUnif.patternStrength, params.patternStrength);
     gl.uniform1f(bnUnif.patternFreq, params.patternFreq);
     gl.uniform2f(bnUnif.patternCenter, params.patternCenter[0], params.patternCenter[1]);
-    gl.uniform1f(bnUnif.mirrorAmount, params.mirrorAmount);
-    gl.uniform1i(bnUnif.mirrorAxis, params.mirrorAxis);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.enableVertexAttribArray(bnAttr.position);
@@ -727,8 +721,6 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(msUnif.patternStrength, params.patternStrength);
     gl.uniform1f(msUnif.patternFreq, params.patternFreq);
     gl.uniform2f(msUnif.patternCenter, params.patternCenter[0], params.patternCenter[1]);
-    gl.uniform1f(msUnif.mirrorAmount, params.mirrorAmount);
-    gl.uniform1i(msUnif.mirrorAxis, params.mirrorAxis);
     gl.uniform2f(msUnif.movementShapeScaling, params.movementShapeScaling[0], params.movementShapeScaling[1]);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
