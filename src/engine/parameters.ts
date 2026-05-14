@@ -195,8 +195,8 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   //   ],
   //   rng,
   // );
-  const shouldMoveThreshold = 0.2;
-  const shouldFallThreshold = shouldMoveThreshold;
+  // shouldMoveThreshold / shouldFallThreshold are defined after shapeNoiseMode
+  // because BlockNoise mode needs a lower threshold (see comment there).
 
   const moveShapeSpeed = 0.025;
   const moveShapeScale = getMoveShapeScale(fxWithBlocking, blockingScale);
@@ -321,6 +321,13 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     ],
     rng,
   );
+
+  // BlockNoise mode samples 4 independent channels per pixel and ORs opposing
+  // pairs (L||R, U||D), which roughly doubles the activation rate vs the
+  // single-sample StructuralQuintic path at the same threshold. Compensate
+  // with a lower threshold so visible movement density matches.
+  const shouldMoveThreshold = shapeNoiseMode === ShapeNoiseMode.BlockNoise ? 0.123 : 0.2;
+  const shouldFallThreshold = shouldMoveThreshold;
 
   // For StructuralQuintic: pick a horizontal direction for the shape scroll.
   // For BlockNoise: optionally disable XY shape scroll (handled in renderer).
