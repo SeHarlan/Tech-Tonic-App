@@ -418,8 +418,8 @@ export function createEngine(config: EngineConfig): Engine {
   let movementShapeTexture: WebGLTexture | null = null;
   let movementShapeFBOHandle: WebGLFramebuffer | null = null;
   let movementShapeSize = 0;
-  // REPEAT wrap so fract()-driven UVs in the shader sample seamlessly when
-  // the read crosses the [0,1] boundary.
+  // CLAMP_TO_EDGE because in-range sampling is guaranteed by
+  // (blockingSt + 0.5) / u_blocking; NEAREST keeps block boundaries crisp.
   function createBlockNoiseTexture(size: number, wrap: number, filter: number) {
     const tex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, tex);
