@@ -62,6 +62,7 @@ uniform sampler2D u_blockNoiseTex;
 uniform sampler2D u_movementShapeTex;
 uniform highp sampler3D u_noiseVolume;
 uniform int u_shapeNoiseMode;
+uniform float u_movementNoiseShapeDirection;
 uniform float u_contourTimeMult;
 uniform sampler2D u_cameraTex;
 uniform float u_useCamera;
@@ -457,7 +458,8 @@ void main() {
 
       if(moveMovementNoisePatterns) {
         //move right (TODO: will need to bake in a bool that effects global direction to have left be an option)
-        moveShapeSt -= vec2(moveShapeTime * 1.1, 0.);
+        float shapeMovement = u_movementNoiseShapeDirection;
+        moveShapeSt -= vec2(moveShapeTime * 1.1 * shapeMovement, 0.);
       }
       mediump float moveNoise = shapeNoise(moveShapeSt, moveShapeTime * moveShapeTimeAdjust, true);
       direction = moveNoise < 0.5 ? -1.0 : 1.0;

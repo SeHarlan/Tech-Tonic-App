@@ -2,6 +2,18 @@ import type { ShaderParams } from './types';
 
 export const SEED_MODULUS = 222; //above ~300 start effecting noise shapes way too much
 
+// --- Shape Noise Mode ---
+// Noise algorithm used for waterfall + move (left/right) shapes.
+// Values must match #define constants in main.frag.
+export const ShapeNoiseMode = {
+  // Current: 0,       // trilinear 3D noise volume (C0 — sharp grid angles)
+  // FbmQuintic: 1,    // 4-octave FBM of quintic-smoothed 2D noise
+  // Metaballs: 2,     // animated metaballs with smooth-min union
+  StructuralQuintic: 3, // 3D volume re-sampled with quintic Hermite (C2)
+  BlockNoise: 4,        // direct read from u_blockNoiseTex (R channel)
+} as const;
+export type ShapeNoiseMode = (typeof ShapeNoiseMode)[keyof typeof ShapeNoiseMode];
+
 // --- Seeded RNG (mulberry32) ---
 
 export function createSeededRNG(seedValue: number): () => number {
@@ -46,6 +58,29 @@ export function weightedRandom<T>(
   }
   // Fallback (floating point edge cases)
   return entries[entries.length - 1][0];
+}
+
+// --- Movement Shape Scaling ---
+
+// Snap to values that produce uniform cell-to-pixel mapping in movementShape.frag.
+// FBO size = blockingScale; cells per FBO pixel = scaling. Non-uniform widths arise
+// unless `scaling` is integer (>=1) or `1/scaling` is a power-of-2 divisor of blockingScale.
+// Picks the closest allowed value; on ties (e.g. 0.75 ↔ {1, 0.5}) prefer the smaller
+// scaling so "low scaling = bigger shapes" intent is preserved.
+export function snapMovementShapeScaling(base: number, blockingScale: number): number {
+  if (base >= 1) return Math.max(1, Math.round(base));
+  const maxK = Math.max(1, blockingScale);
+  let bestScaling = 1;
+  let bestDist = Math.abs(base - 1);
+  for (let k = 2; k <= maxK; k *= 2) {
+    const candidate = 1 / k;
+    const dist = Math.abs(base - candidate);
+    if (dist <= bestDist) {
+      bestDist = dist;
+      bestScaling = candidate;
+    }
+  }
+  return bestScaling;
 }
 
 // --- Shape Scale Helpers ---
@@ -99,20 +134,20 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     rng,
   );
 
-
-
   // 8-512
-  const blockingScale = weightedRandom<number>([
-    [8, 1],
-    [16, 2],
-    [32, 3],
-    [64, 5],
-    [128, 10],
-    [256, 10],
-    [512, 5],
-  ], rng);
-// const blockingScale = 8; //base block shape for speedd compensation
-
+  const blockingScale = weightedRandom<number>(
+    [
+      [8, 1],
+      [16, 2],
+      [32, 3],
+      [64, 5],
+      [128, 10],
+      [256, 10],
+      [512, 5],
+    ],
+    rng,
+  );
+  // const blockingScale = 8; //base block shape for speedd compensation
 
   // Domain warp: how much the noise boundaries swirl/fold
   // Operates in normalized noise-space, so no blockingScale scaling needed
@@ -145,13 +180,13 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
 
   //TODO - needs work, it seems like the circles are getting tiled
   const patternStrength = patternMode === 0 ? 0 : randomFloat(0.5, 2);
-  const patternFreq = randomFloat(1.0, 4.0)
+  const patternFreq = randomFloat(1.0, 4.0);
 
   const patternCenter = [0.5, 0.5] as [number, number];
 
   // TODO deprecated clean all mirror related stuff up
   const mirrorAmount = 0;
-  const mirrorAxis = 0
+  const mirrorAxis = 0;
 
   // Move parameters
   // const shouldMoveThreshold = weightedRandom<number>(
@@ -174,19 +209,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     blockingScale,
   );
 
-
-
-  // const fallWaterfallMult = weightedRandom<number>(
-  //   [
-  //     // [1, 1],
-  //     [1.25, 2],
-  //     [1.5, 4],
-  //     [1.75, 2],
-  //     // [2, 1],
-  //   ],
-  //   rng,
-  // );
-  const fallWaterfallMult = 1;
+  const fallWaterfallMult = 1; //amount of variation between streams/mini columns (has a built in floor so none will be 0)
 
   const defaultWaterfallMode = weightedRandom<boolean>(
     [
@@ -208,7 +231,10 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const useRibbonThreshold = 0.25;
 
   const blackNoiseBaseScaleBase = Math.floor(randomFloat(2, 10));
-  const blackNoiseBaseScale = [blackNoiseBaseScaleBase, blackNoiseBaseScaleBase];
+  const blackNoiseBaseScale = [
+    blackNoiseBaseScaleBase,
+    blackNoiseBaseScaleBase,
+  ];
   // const blackNoiseBaseScale = [Math.floor(randomFloat(5, 20)), Math.floor(randomFloat(3, 15))]
 
   const blackNoiseScale: [number, number] = [
@@ -280,7 +306,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     extraFallShapeThreshold,
     fxWithBlocking,
     blockingScale,
-  )//.map((x) => x * 3) as [number, number];
+  ); //.map((x) => x * 3) as [number, number];
 
   // Extra move parameters
   const extraMoveShapeThreshold = extraFallShapeThreshold;
@@ -299,23 +325,68 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     extraMoveShapeThreshold,
     fxWithBlocking,
     blockingScale,
-  )//.map((x) => x * 3) as [number, number];
+  ); //.map((x) => x * 3) as [number, number];
+
+  // Shape noise mode — 4:1 BlockNoise vs StructuralQuintic.
+  const shapeNoiseMode = weightedRandom<ShapeNoiseMode>(
+    [
+      [ShapeNoiseMode.BlockNoise, 4],
+      [ShapeNoiseMode.StructuralQuintic, 1],
+    ],
+    rng,
+  );
+
+  // For StructuralQuintic: pick a horizontal direction for the shape scroll.
+  // For BlockNoise: optionally disable XY shape scroll (handled in renderer).
+  let movementNoiseShapeDirection = 1;
+  let blockNoiseDisableShapeMovement = false;
+  if (shapeNoiseMode === ShapeNoiseMode.StructuralQuintic) {
+    movementNoiseShapeDirection = rng() < 0.5 ? 1 : -1;
+  } else {
+    blockNoiseDisableShapeMovement = weightedRandom<boolean>(
+      [
+        [false, 4],
+        [true, 1],
+      ],
+      rng,
+    );
+  }
 
   // > 1 creates tiling, but 2 or 3 is kinda cool, might be good for a rare
-  // const movementShapeScaling = weightedRandom<[number, number]>(
-  //   [
-  //     [[0.25, 0.25], 1],
-  //     [[0.5, 0.5], 3],
-  //     [[0.75, 0.75], 6],
-  //     [[1.0, 1.0], 9],
-  //     // [[0.5, 2.0], 1],
-  //     [[2.0, 0.5], 3],
-  //     [[2.0, 2.0], 2],
-  //     [[3.0, 3.0], 1],
-  //   ],
-  //   rng,
-  // );
-  const movementShapeScaling = [.5, .5] as [number, number];
+  const movementShapeScalingBase = blockNoiseDisableShapeMovement
+    ? weightedRandom(
+        [
+          [0.25, 3],
+          [0.5, 6],
+          [0.75, 4],
+          [1.0, 2],
+        ],
+        rng,
+      )
+    : //if there is shape movement
+      weightedRandom(
+        [
+          [0.25, 1],
+          [0.5, 3],
+          [0.75, 6],
+          [1.0, 10],
+          [2.0, 2],
+          [3.0, 1],
+        ],
+        rng,
+      );
+   
+      
+  // Snap to a value that gives uniform cell-edge spacing on the FBO grid.
+  // Without this, fractional bases like 0.75 produce ragged shape edges.
+  const movementShapeScalingEffective = snapMovementShapeScaling(
+    movementShapeScalingBase,
+    blockingScale,
+  );
+  const movementShapeScaling = [
+    movementShapeScalingEffective,
+    movementShapeScalingEffective,
+  ] as [number, number];
 
   return {
     seed: rngSeed,
@@ -350,6 +421,9 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     mirrorAxis,
     movementShapeScaling,
     useRibbonThreshold,
+    shapeNoiseMode,
+    movementNoiseShapeDirection,
+    blockNoiseDisableShapeMovement,
   };
 }
 

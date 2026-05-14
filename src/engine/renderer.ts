@@ -23,8 +23,13 @@ const STRUCTURAL_TIME_MULT = 0.0025; //structural z axis ( and reset)
 const RESET_NOISE_TIME_MULT = 5.0; //reset noise z drift relative to structural time
 
 const MOVEMENT_NOISE_TIME_MULT = 0.008;//z axis for baked movement noise
-const MOVEMENT_NOISE_X_TIME_MULT = 0.013  * 0.5;//horizontal movement-mask drift speed (TODO, needs dynamic multiply by movementShapeScaling)
-const MOVEMENT_NOISE_Y_TIME_MULT = MOVEMENT_NOISE_X_TIME_MULT * (FIXED_CANVAS_WIDTH / FIXED_CANVAS_HEIGHT);//vertical drift speed
+// When params.blockNoiseDisableShapeMovement is true the XY shape scroll is killed
+// and the Z drift speed is scaled by this factor to keep the mask alive.
+const MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR = 2.0;
+// Base drift speed at movementShapeScaling = 1. Multiplied by params.movementShapeScaling
+// at use so apparent on-screen speed stays normalized as scaling changes.
+const MOVEMENT_NOISE_X_TIME_MULT_BASE = 0.013;
+const MOVEMENT_NOISE_Y_TIME_MULT_BASE = MOVEMENT_NOISE_X_TIME_MULT_BASE * (FIXED_CANVAS_WIDTH / FIXED_CANVAS_HEIGHT);
 // Movement masks are rendered at blockingScale resolution. A full inverse scale
 // over-corrects coarse masks, so use a softer perceptual compensation curve.
 const MOVEMENT_MASK_REFERENCE_SCALE = 512; // blockScale where XY speed is unchanged
@@ -79,18 +84,6 @@ const InitialMovementPattern = {
 } as const;
 type InitialMovementPattern = (typeof InitialMovementPattern)[keyof typeof InitialMovementPattern];
 const INITIAL_MOVEMENT_PATTERN: InitialMovementPattern = InitialMovementPattern.None;
-
-// Noise algorithm used for waterfall + move (left/right) shapes.
-// Swap to compare how each renders the blobby/paint-drip silhouette.
-const ShapeNoiseMode = {
-  // Current: 0, // existing: trilinear 3D noise volume (C0 — produces sharp grid angles)
-  // FbmQuintic: 1, // 4-octave FBM of quintic-smoothed 2D noise (C2 everywhere)
-  // Metaballs: 2, // animated metaballs with smooth-min union — roundest blobs
-  StructuralQuintic: 3, // same 3D volume as Current, re-sampled with quintic Hermite (C2) via manual 8-corner texelFetch
-  BlockNoise: 4, // direct read from u_blockNoiseTex (R channel)
-} as const;
-type ShapeNoiseMode = (typeof ShapeNoiseMode)[keyof typeof ShapeNoiseMode];
-const SHAPE_NOISE_MODE: ShapeNoiseMode = ShapeNoiseMode.BlockNoise;
 
 // --- Shader helper ---
 
@@ -309,6 +302,7 @@ export function createEngine(config: EngineConfig): Engine {
     movementShapeTex: gl.getUniformLocation(mainProg, 'u_movementShapeTex'),
     noiseVolume: gl.getUniformLocation(mainProg, 'u_noiseVolume'),
     shapeNoiseMode: gl.getUniformLocation(mainProg, 'u_shapeNoiseMode'),
+    movementNoiseShapeDirection: gl.getUniformLocation(mainProg, 'u_movementNoiseShapeDirection'),
     contourTimeMult: gl.getUniformLocation(mainProg, 'u_contourTimeMult'),
     cameraTex: gl.getUniformLocation(mainProg, 'u_cameraTex'),
     useCamera: gl.getUniformLocation(mainProg, 'u_useCamera'),
@@ -766,11 +760,13 @@ export function createEngine(config: EngineConfig): Engine {
   }
 
   function movementMaskXYTime(moveTime: number, blockingScale: number): [number, number] {
+    if (params.blockNoiseDisableShapeMovement) return [0, 0];
     const scaleRatio = MOVEMENT_MASK_REFERENCE_SCALE / Math.max(1, blockingScale);
     const scaleCompensation = Math.pow(scaleRatio, MOVEMENT_MASK_SCALE_EXPONENT);
+    const [msx, msy] = params.movementShapeScaling;
     return [
-      moveTime * MOVEMENT_NOISE_X_TIME_MULT * scaleCompensation,
-      moveTime * MOVEMENT_NOISE_Y_TIME_MULT * scaleCompensation,
+      moveTime * MOVEMENT_NOISE_X_TIME_MULT_BASE * msx * scaleCompensation,
+      moveTime * MOVEMENT_NOISE_Y_TIME_MULT_BASE * msy * scaleCompensation,
     ];
   }
 
@@ -787,7 +783,10 @@ export function createEngine(config: EngineConfig): Engine {
     // Block noise pre-pass
     const moveTime = time * (targetFps / 30);
     const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT;
-    const mnt = manualModeFlag ? 0.0 : moveTime * MOVEMENT_NOISE_TIME_MULT;
+    const movementNoiseTimeMult = params.blockNoiseDisableShapeMovement
+      ? MOVEMENT_NOISE_TIME_MULT * MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR
+      : MOVEMENT_NOISE_TIME_MULT;
+    const mnt = manualModeFlag ? 0.0 : moveTime * movementNoiseTimeMult;
     const mnxyt = manualModeFlag ? [0.0, 0.0] as [number, number] : movementMaskXYTime(moveTime, params.blockingScale);
     renderBlockNoise(smt);
     renderMovementShapeMask(smt, mnt, mnxyt);
@@ -833,7 +832,8 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform2f(mainUnif.extraMoveStutterScale, EXTRA_MOVE_STUTTER_SCALE[0], EXTRA_MOVE_STUTTER_SCALE[1]);
     gl.uniform1f(mainUnif.extraFallStutterThreshold, EXTRA_FALL_STUTTER_THRESHOLD);
     gl.uniform1f(mainUnif.extraMoveStutterThreshold, EXTRA_MOVE_STUTTER_THRESHOLD);
-    gl.uniform1i(mainUnif.shapeNoiseMode, SHAPE_NOISE_MODE);
+    gl.uniform1i(mainUnif.shapeNoiseMode, params.shapeNoiseMode);
+    gl.uniform1f(mainUnif.movementNoiseShapeDirection, params.movementNoiseShapeDirection);
     gl.uniform1f(mainUnif.contourTimeMult, CONTOUR_TIME_MULT);
 
     // Seed-derived params

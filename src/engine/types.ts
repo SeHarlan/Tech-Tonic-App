@@ -54,6 +54,9 @@ export interface ShaderParams {
   mirrorAmount: number;
   mirrorAxis: number;
   movementShapeScaling: [number, number];
+  shapeNoiseMode: number;
+  movementNoiseShapeDirection: number;
+  blockNoiseDisableShapeMovement: boolean;
 }
 
 // --- Drawing Types ---
