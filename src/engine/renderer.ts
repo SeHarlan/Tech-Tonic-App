@@ -256,7 +256,6 @@ export function createEngine(config: EngineConfig): Engine {
     moveShapeSpeed: gl.getUniformLocation(mainProg, 'u_moveShapeSpeed'),
     resetThreshold: gl.getUniformLocation(mainProg, 'u_resetThreshold'),
     resetEdgeThreshold: gl.getUniformLocation(mainProg, 'u_resetEdgeThreshold'),
-    resetNoiseScale: gl.getUniformLocation(mainProg, 'u_resetNoiseScale'),
     resetThresholdVariance: gl.getUniformLocation(mainProg, 'u_resetThresholdVariance'),
     movementThresholdVariance: gl.getUniformLocation(mainProg, 'u_movementThresholdVariance'),
     shouldFallThreshold: gl.getUniformLocation(mainProg, 'u_shouldFallThreshold'),
@@ -841,7 +840,6 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform2f(mainUnif.moveShapeScale, params.moveShapeScale[0], params.moveShapeScale[1]);
     gl.uniform1f(mainUnif.moveShapeSpeed, params.moveShapeSpeed);
     gl.uniform1f(mainUnif.resetThreshold, effReset);
-    // gl.uniform2f(mainUnif.resetNoiseScale, params.resetNoiseScale[0], params.resetNoiseScale[1]);
     gl.uniform1f(mainUnif.shouldFallThreshold, effFall);
     gl.uniform2f(mainUnif.shouldFallScale, params.shouldFallScale[0], params.shouldFallScale[1]);
     gl.uniform1f(mainUnif.fallShapeSpeed, params.fallShapeSpeed);

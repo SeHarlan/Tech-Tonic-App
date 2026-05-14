@@ -18,7 +18,6 @@ uniform vec2 u_moveShapeScale;
 uniform float u_moveShapeSpeed;
 uniform mediump float u_resetThreshold;
 uniform mediump float u_resetEdgeThreshold;
-uniform vec2 u_resetNoiseScale;
 uniform mediump float u_resetThresholdVariance;
 uniform mediump float u_movementThresholdVariance;
 uniform mediump float u_shouldFallThreshold;
