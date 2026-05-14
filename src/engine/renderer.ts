@@ -417,7 +417,6 @@ export function createEngine(config: EngineConfig): Engine {
   // Sized 1:1 with blockingScale; sampled per block-cell in main.frag.
   let movementShapeTexture: WebGLTexture | null = null;
   let movementShapeFBOHandle: WebGLFramebuffer | null = null;
-  let movementShapeSize = 0;
   // CLAMP_TO_EDGE because in-range sampling is guaranteed by
   // (blockingSt + 0.5) / u_blocking; NEAREST keeps block boundaries crisp.
   function createBlockNoiseTexture(size: number, wrap: number, filter: number) {
@@ -444,10 +443,9 @@ export function createEngine(config: EngineConfig): Engine {
     blockNoiseTexture = tex;
     blockNoiseFBOHandle = fbo;
 
-    movementShapeSize = blockNoiseSize;
     if (movementShapeTexture) gl.deleteTexture(movementShapeTexture);
     if (movementShapeFBOHandle) gl.deleteFramebuffer(movementShapeFBOHandle);
-    const ms = createBlockNoiseTexture(movementShapeSize, gl.CLAMP_TO_EDGE, gl.NEAREST);
+    const ms = createBlockNoiseTexture(blockNoiseSize, gl.CLAMP_TO_EDGE, gl.NEAREST);
     movementShapeTexture = ms.tex;
     movementShapeFBOHandle = ms.fbo;
   }
@@ -732,7 +730,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.vertexAttribPointer(msAttr.texCoord, 2, gl.FLOAT, false, 0, 0);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, movementShapeFBOHandle);
-    gl.viewport(0, 0, movementShapeSize, movementShapeSize);
+    gl.viewport(0, 0, blockNoiseSize, blockNoiseSize);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -778,9 +776,9 @@ export function createEngine(config: EngineConfig): Engine {
       ? MOVEMENT_NOISE_TIME_MULT * MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR
       : MOVEMENT_NOISE_TIME_MULT;
     const mnt = manualModeFlag ? 0.0 : moveTime * movementNoiseTimeMult;
-    const mnxyt = manualModeFlag ? [0.0, 0.0] as [number, number] : movementMaskXYTime(moveTime, params.blockingScale);
     renderBlockNoise(smt);
     if (params.shapeNoiseMode === ShapeNoiseMode.BlockNoise) {
+      const mnxyt = manualModeFlag ? [0.0, 0.0] as [number, number] : movementMaskXYTime(moveTime, params.blockingScale);
       renderMovementShapeMask(smt, mnt, mnxyt);
     }
 
