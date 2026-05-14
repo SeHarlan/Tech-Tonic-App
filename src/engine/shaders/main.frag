@@ -279,6 +279,24 @@ vec4 createGradientBlock(vec2 st, bool horizontal) {
   return base;
 }
 
+// Block-grid movement noise. Channels: R=left, G=right, B=up, A=down.
+// Sampled at block-cell center so adjacent pixels in the same block read
+// identical continuous noise values. Collisions (both opposing channels
+// active) resolve to 0 via the float-subtraction trick.
+void decodeMaskDirections(vec2 uv, float hThresh, float vThresh,
+                          out bool hMoves, out bool vMoves,
+                          out float hDir, out float vDir) {
+  vec4 m = texture(u_movementShapeTex, uv);
+  bool L = m.r < hThresh;
+  bool R = m.g < hThresh;
+  bool U = m.b < vThresh;
+  bool D = m.a < vThresh;
+  hMoves = L || R;
+  vMoves = U || D;
+  hDir = float(L) - float(R);
+  vDir = float(D) - float(U);
+}
+
 void main() {
     vec2 st = v_texCoord;
     vec4 blankColor = vec4(u_blankColor, 1.);
@@ -342,71 +360,18 @@ void main() {
 
     vec2 blockCellUV = (blockingSt + 0.5) / u_blocking;
     if (useMovementMask) {
-        //MAIN MOVEMENT MASK
-      // Block-grid movement noise. Channels: R=left, G=right, B=up, A=down.
-      // Sampled at block-cell center so adjacent pixels in the same block
-      // read identical continuous noise values.
-      vec2 movementMaskUV = blockCellUV;
-      vec4 movementMask = texture(u_movementShapeTex, movementMaskUV);
+      decodeMaskDirections(
+        blockCellUV, shouldMoveThreshold, shouldFallThreshold,
+        maskMovesHorizontal, maskMovesVertical,
+        maskHorizontalDirection, maskVerticalDirection
+      );
 
-      bool maskMovesLeft = movementMask.r < shouldMoveThreshold;
-      bool maskMovesRight = movementMask.g < shouldMoveThreshold;
-      bool maskMovesUp = movementMask.b < shouldFallThreshold;
-      bool maskMovesDown = movementMask.a < shouldFallThreshold;
-
-      maskMovesHorizontal = maskMovesLeft || maskMovesRight;
-      maskMovesVertical = maskMovesUp || maskMovesDown;
-
-      if (maskMovesLeft && maskMovesRight) {
-        // collisions cancel out movement
-        maskHorizontalDirection = 0.0;
-      } else if (maskMovesLeft) {
-        maskHorizontalDirection = 1.0;
-      } else if (maskMovesRight) {
-        maskHorizontalDirection = -1.0;
-      }
-
-      if (maskMovesUp && maskMovesDown) {
-        // collisions cancel out movement
-        maskVerticalDirection = 0.0;
-      } else if (maskMovesUp) {
-        maskVerticalDirection = -1.0;
-      } else if (maskMovesDown) {
-        maskVerticalDirection = 1.0;
-      }
-
-
-      //EXTRA MOVEMENT MASK
-      vec2 extraMovementMaskUV = blockCellUV;
-      extraMovementMaskUV = fract(0.5 + extraMovementMaskUV * 2.);
-
-      vec4 extraMovementMask = texture(u_movementShapeTex, extraMovementMaskUV);
-
-      bool maskExtraMovesLeft = extraMovementMask.r < extraMoveShapeThreshold;
-      bool maskExtraMovesRight = extraMovementMask.g < extraMoveShapeThreshold;
-      bool maskExtraMovesUp = extraMovementMask.b < extraFallShapeThreshold;
-      bool maskExtraMovesDown = extraMovementMask.a < extraFallShapeThreshold;
-
-      maskExtraMovesHorizontal = maskExtraMovesLeft || maskExtraMovesRight;
-      maskExtraMovesVertical = maskExtraMovesUp || maskExtraMovesDown;
-
-      if (maskExtraMovesLeft && maskExtraMovesRight) {
-        // collisions cancel out movement
-        maskExtraHorizontalDirection = 0.0;
-      } else if (maskExtraMovesLeft) {
-        maskExtraHorizontalDirection = 1.0;
-      } else if (maskExtraMovesRight) {
-        maskExtraHorizontalDirection = -1.0;
-      }
-
-      if (maskExtraMovesUp && maskExtraMovesDown) {
-        // collisions cancel out movement
-        maskExtraVerticalDirection = 0.0;
-      } else if (maskExtraMovesUp) {
-        maskExtraVerticalDirection = -1.0;
-      } else if (maskExtraMovesDown) {
-        maskExtraVerticalDirection = 1.0;
-      }
+      vec2 extraMovementMaskUV = fract(0.5 + blockCellUV * 2.);
+      decodeMaskDirections(
+        extraMovementMaskUV, extraMoveShapeThreshold, extraFallShapeThreshold,
+        maskExtraMovesHorizontal, maskExtraMovesVertical,
+        maskExtraHorizontalDirection, maskExtraVerticalDirection
+      );
     }
 
     float blockTime = floor(time * u_blockTimeMult);
