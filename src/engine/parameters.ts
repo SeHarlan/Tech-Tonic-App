@@ -1,6 +1,6 @@
 import type { ShaderParams } from './types';
 
-export const SEED_MODULUS = 222; //above ~300 start effecting noise shapes way too much
+export const SEED_MODULUS = 222; //above ~300 start affecting noise shapes way too much
 
 // --- Shape Noise Mode ---
 // Noise algorithm used for waterfall + move (left/right) shapes.

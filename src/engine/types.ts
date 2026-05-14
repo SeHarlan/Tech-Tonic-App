@@ -38,7 +38,6 @@ export interface ShaderParams {
   blackNoiseScale: [number, number];
   blackNoiseEdgeMult: number;
   resetThreshold: number;
-  // resetNoiseScale: [number, number];
   dirtNoiseScale: [number, number];
   blankStaticScale: [number, number];
   blankStaticThreshold: number;
