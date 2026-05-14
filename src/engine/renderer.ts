@@ -1,6 +1,6 @@
 import type { EngineConfig, EngineState, ShaderParams, DrawMode, Direction, EraseVariant } from './types';
 import { mainVert, mainFrag, displayVert, displayFrag, blockNoiseVert, blockNoiseFrag, movementShapeFrag, noiseVolumeVert, noiseVolumeFrag } from './shaders';
-import { randomizeShaderParameters, normalizeSeed, SEED_MODULUS } from './parameters';
+import { randomizeShaderParameters, normalizeSeed, SEED_MODULUS, ShapeNoiseMode } from './parameters';
 import { createDrawingManager, type DrawingManager } from './drawing';
 import { captureScreenshot, captureScreenshotBase64, createVideoRecorder } from './recording';
 import { serializeState, loadStateIntoTextures, type SerializedState } from './state';
@@ -780,7 +780,9 @@ export function createEngine(config: EngineConfig): Engine {
     const mnt = manualModeFlag ? 0.0 : moveTime * movementNoiseTimeMult;
     const mnxyt = manualModeFlag ? [0.0, 0.0] as [number, number] : movementMaskXYTime(moveTime, params.blockingScale);
     renderBlockNoise(smt);
-    renderMovementShapeMask(smt, mnt, mnxyt);
+    if (params.shapeNoiseMode === ShapeNoiseMode.BlockNoise) {
+      renderMovementShapeMask(smt, mnt, mnxyt);
+    }
 
     // Main compute pass — render to next framebuffer
     gl.bindFramebuffer(gl.FRAMEBUFFER, ppFBOs[nextFbIndex]);
