@@ -284,7 +284,6 @@ void main() {
     vec4 blankColor = vec4(u_blankColor, 1.);
 
     bool moveMovementNoisePatterns = true; //only applies to non baked movement noise
-    float shapeNoiseBlockSpeedAdjust = 1.;
     float moveShapeTimeAdjust = 0.;
 
     bool useMovementMask = u_shapeNoiseMode == SHAPE_NOISE_BLOCK_NOISE;
