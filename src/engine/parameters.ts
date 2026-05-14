@@ -85,37 +85,33 @@ export function snapMovementShapeScaling(base: number, blockingScale: number): n
 
 // --- Shape Scale Helpers ---
 
+// baseScale is the number of noise-volume cells spanned across the screen on each axis.
+// fxWithBlocking divides by blockingScale because blockingSt = floor(st * blocking),
+// so multiplying that by (n / blockingScale) recovers the same effective range as n * st.
+// Both axes are kept >= ~1.5 so the StructuralQuintic volume (128×128×64, sampled in cell
+// units) actually has variation across the screen — sub-cell ranges collapse to one value.
 function getShapeScale(
   baseScale: [number, number],
-  threshold: number,
-  adjustmentFactor: number,
   fxWithBlocking: boolean,
   blockingScale: number,
 ): [number, number] {
-  // shapeNormalizer keeps shape size stable so threshold acts as frequency adjuster
-  const shapeNormalizer = 0.2 / threshold;
-  return baseScale.map((n) => {
-    let base = fxWithBlocking ? n / blockingScale : n;
-    base /= shapeNormalizer;
-    base /= adjustmentFactor;
-    return base;
-  }) as [number, number];
+  return baseScale.map((n) =>
+    fxWithBlocking ? n / blockingScale : n,
+  ) as [number, number];
 }
 
 export function getFallShapeScale(
-  threshold: number,
   fxWithBlocking: boolean,
   blockingScale: number,
 ): [number, number] {
-  return getShapeScale([10, 0.5], threshold, 1, fxWithBlocking, blockingScale);
+  return getShapeScale([10, .33], fxWithBlocking, blockingScale);
 }
 
 export function getMoveShapeScale(
-  threshold: number,
   fxWithBlocking: boolean,
   blockingScale: number,
 ): [number, number] {
-  return getShapeScale([0.5, 5], threshold, 1, fxWithBlocking, blockingScale);
+  return getShapeScale([.33, 10], fxWithBlocking, blockingScale);
 }
 
 // --- Parameter Randomization ---
@@ -199,15 +195,11 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   //   ],
   //   rng,
   // );
-  const shouldMoveThreshold = 0.123;
+  const shouldMoveThreshold = 0.2;
   const shouldFallThreshold = shouldMoveThreshold;
 
   const moveShapeSpeed = 0.025;
-  const moveShapeScale = getMoveShapeScale(
-    shouldMoveThreshold,
-    fxWithBlocking,
-    blockingScale,
-  );
+  const moveShapeScale = getMoveShapeScale(fxWithBlocking, blockingScale);
 
   const fallWaterfallMult = 1; //amount of variation between streams/mini columns (has a built in floor so none will be 0)
 
@@ -220,11 +212,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   );
 
   const fallShapeSpeed = 0.044;
-  const shouldFallScale = getFallShapeScale(
-    shouldFallThreshold,
-    fxWithBlocking,
-    blockingScale,
-  );
+  const shouldFallScale = getFallShapeScale(fxWithBlocking, blockingScale);
 
   //Paint thresholds
   const blackNoiseThreshold = 0.49;
@@ -303,10 +291,9 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const extraFallShapeThreshold = 0.0567;
 
   const extraFallShapeScale = getFallShapeScale(
-    extraFallShapeThreshold,
     fxWithBlocking,
     blockingScale,
-  ); //.map((x) => x * 3) as [number, number];
+  ).map((x) => x * 3) as [number, number];
 
   // Extra move parameters
   const extraMoveShapeThreshold = extraFallShapeThreshold;
@@ -322,15 +309,14 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   // );
 
   const extraMoveShapeScale = getMoveShapeScale(
-    extraMoveShapeThreshold,
     fxWithBlocking,
     blockingScale,
-  ); //.map((x) => x * 3) as [number, number];
+  ).map((x) => x * 3) as [number, number];
 
   // Shape noise mode — 4:1 BlockNoise vs StructuralQuintic.
   const shapeNoiseMode = weightedRandom<ShapeNoiseMode>(
     [
-      [ShapeNoiseMode.BlockNoise, 4],
+      [ShapeNoiseMode.BlockNoise, 0], //TODO should be 4, just testing right now
       [ShapeNoiseMode.StructuralQuintic, 1],
     ],
     rng,

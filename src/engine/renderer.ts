@@ -1081,7 +1081,9 @@ export function createEngine(config: EngineConfig): Engine {
 
     async loadState(state) {
       seed = normalizeSeed(state.seed);
-      params = state.params;
+      // Forward-compat: fill in any fields missing from older saved states
+      // by re-deriving from seed. Saved values still win on overlap.
+      params = { ...randomizeShaderParameters(seed), ...state.params };
       totalFrameCount = state.totalFrameCount;
       time = totalFrameCount / targetFps;
 

@@ -379,7 +379,7 @@ void main() {
 
       //EXTRA MOVEMENT MASK
       vec2 extraMovementMaskUV = (blockingSt + 0.5) / u_blocking;
-      extraMovementMaskUV = fract(extraMovementMaskUV * 2.);//(1.0 - extraMovementMaskUV);
+      extraMovementMaskUV = fract(0.5 + extraMovementMaskUV * 2.);
 
       vec4 extraMovementMask = texture(u_movementShapeTex, extraMovementMaskUV);
 
@@ -453,16 +453,17 @@ void main() {
     float direction = maskHorizontalDirection; //comes direction from the baked noise 
     bool shouldMove = maskMovesHorizontal;
 
+    float movementNoiseShapeDirection = u_movementNoiseShapeDirection;
+
     if(!useMovementMask) {
       float moveShapeTime = moveTime * u_moveShapeSpeed;
 
       if(moveMovementNoisePatterns) {
-        //move right (TODO: will need to bake in a bool that effects global direction to have left be an option)
-        float shapeMovement = u_movementNoiseShapeDirection;
-        moveShapeSt -= vec2(moveShapeTime * 1.1 * shapeMovement, 0.);
+        moveShapeSt -= vec2(moveShapeTime * 1.1 * movementNoiseShapeDirection, 0.);
       }
       mediump float moveNoise = shapeNoise(moveShapeSt, moveShapeTime * moveShapeTimeAdjust, true);
       direction = moveNoise < 0.5 ? -1.0 : 1.0;
+      direction *= movementNoiseShapeDirection; //need to account for the reversed shape direction
       shouldMove = moveNoise < shouldMoveThreshold;
     }
 
@@ -612,7 +613,7 @@ void main() {
 
       if(moveMovementNoisePatterns) {
         //extra move left/right
-        extraMoveShapeSt += vec2(extraMoveTime * direction, 0.952);
+        extraMoveShapeSt += vec2(extraMoveTime * movementNoiseShapeDirection, 0.952);
       }
       mediump float extraMoveShape = shapeNoise((1.0 - extraMoveShapeSt), extraMoveTime, true);
       inExtraMove = extraMoveShape < extraMoveShapeThreshold;
