@@ -340,12 +340,13 @@ void main() {
     bool maskExtraMovesVertical = false;
     float maskExtraVerticalDirection = 1.;
 
+    vec2 blockCellUV = (blockingSt + 0.5) / u_blocking;
     if (useMovementMask) {
         //MAIN MOVEMENT MASK
       // Block-grid movement noise. Channels: R=left, G=right, B=up, A=down.
       // Sampled at block-cell center so adjacent pixels in the same block
       // read identical continuous noise values.
-      vec2 movementMaskUV = (blockingSt + 0.5) / u_blocking;
+      vec2 movementMaskUV = blockCellUV;
       vec4 movementMask = texture(u_movementShapeTex, movementMaskUV);
 
       bool maskMovesLeft = movementMask.r < shouldMoveThreshold;
@@ -376,7 +377,7 @@ void main() {
 
 
       //EXTRA MOVEMENT MASK
-      vec2 extraMovementMaskUV = (blockingSt + 0.5) / u_blocking;
+      vec2 extraMovementMaskUV = blockCellUV;
       extraMovementMaskUV = fract(0.5 + extraMovementMaskUV * 2.);
 
       vec4 extraMovementMask = texture(u_movementShapeTex, extraMovementMaskUV);
