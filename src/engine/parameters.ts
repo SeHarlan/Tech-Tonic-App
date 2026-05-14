@@ -316,7 +316,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   // Shape noise mode — 4:1 BlockNoise vs StructuralQuintic.
   const shapeNoiseMode = weightedRandom<ShapeNoiseMode>(
     [
-      [ShapeNoiseMode.BlockNoise, 0], //TODO should be 4, just testing right now
+      [ShapeNoiseMode.BlockNoise, 4],
       [ShapeNoiseMode.StructuralQuintic, 1],
     ],
     rng,
