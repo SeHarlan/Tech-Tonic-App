@@ -37,3 +37,7 @@ public/thumbnails/
 
 
 .review/
+
+# Claude Code runtime
+.claude/scheduled_tasks.lock
+.claude/worktrees/
