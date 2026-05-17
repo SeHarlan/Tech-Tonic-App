@@ -57,6 +57,12 @@ export interface ShaderParams {
   movementNoiseShapeDirection: number;
   blockNoiseDisableShapeMovement: boolean;
   cycleColorHueBaseSpeed: number;
+  palette: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+  useColorCycle: boolean;
 }
 
 // --- Drawing Types ---
