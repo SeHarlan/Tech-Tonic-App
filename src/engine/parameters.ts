@@ -114,6 +114,41 @@ export function getMoveShapeScale(
   return getShapeScale([.33, 10], fxWithBlocking, blockingScale);
 }
 
+// --- Color Palettes ---
+
+export type ColorPalette = {
+  name: string;
+  colors: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+};
+
+// Primary colors (R/G/B). Color cycle is only enabled for this palette.
+export const PRIMARY_PALETTE: ColorPalette = {
+  name: 'primary',
+  colors: [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ],
+};
+
+// Non-primary palettes. Empty for now; add entries to expand the pool.
+export const ADDITIONAL_PALETTES: ColorPalette[] = [];
+
+export function chooseColorPalette(
+  rng: () => number = Math.random,
+): { palette: ColorPalette; useColorCycle: boolean } {
+  const all = [PRIMARY_PALETTE, ...ADDITIONAL_PALETTES];
+  const choice = all[Math.floor(rng() * all.length)];
+  return {
+    palette: choice,
+    useColorCycle: choice === PRIMARY_PALETTE,
+  };
+}
+
 // --- Parameter Randomization ---
 export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const rngSeed = normalizeSeed(seedValue);
@@ -406,6 +441,8 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
       )
     : 0.005;
 
+  const { palette, useColorCycle } = chooseColorPalette(rng);
+
   return {
     seed: rngSeed,
     fxWithBlocking,
@@ -443,6 +480,8 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     movementNoiseShapeDirection,
     blockNoiseDisableShapeMovement,
     cycleColorHueBaseSpeed,
+    palette: palette.colors,
+    useColorCycle,
   };
 }
 

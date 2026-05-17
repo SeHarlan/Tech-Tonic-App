@@ -63,10 +63,6 @@ const RIBBON_DIRT_THRESHOLD = 0.9;
 const BLANK_STATIC_TIME_MULT = 5.0;
 const USE_GRAYSCALE = false;
 const BLANK_COLOR: [number, number, number] = [0.11, 0.11, 0.11]
-const STATIC_COLOR_1: [number, number, number] = [1, 0, 0];
-const STATIC_COLOR_2: [number, number, number] = [0, 1, 0];
-const STATIC_COLOR_3: [number, number, number] = [0, 0, 1];
-const USE_COLOR_CYCLE = true;
 const EXTRA_FALL_STUTTER_SCALE: [number, number] = [50.0, 500.01];
 const EXTRA_MOVE_STUTTER_SCALE: [number, number] = [500.0, 50.01];
 const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
@@ -811,13 +807,13 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
     gl.uniform1f(mainUnif.ribbonDirtThreshold, RIBBON_DIRT_THRESHOLD);
     gl.uniform1i(mainUnif.useGrayscale, USE_GRAYSCALE ? 1 : 0);
-    gl.uniform1i(mainUnif.useColorCycle, USE_COLOR_CYCLE ? 1 : 0);
+    gl.uniform1i(mainUnif.useColorCycle, params.useColorCycle ? 1 : 0);
     gl.uniform1f(mainUnif.blankStaticThreshold, params.blankStaticThreshold);
     gl.uniform1f(mainUnif.blankStaticTimeMult, BLANK_STATIC_TIME_MULT);
     gl.uniform3f(mainUnif.blankColor, BLANK_COLOR[0], BLANK_COLOR[1], BLANK_COLOR[2]);
-    gl.uniform3f(mainUnif.staticColor1, STATIC_COLOR_1[0], STATIC_COLOR_1[1], STATIC_COLOR_1[2]);
-    gl.uniform3f(mainUnif.staticColor2, STATIC_COLOR_2[0], STATIC_COLOR_2[1], STATIC_COLOR_2[2]);
-    gl.uniform3f(mainUnif.staticColor3, STATIC_COLOR_3[0], STATIC_COLOR_3[1], STATIC_COLOR_3[2]);
+    gl.uniform3f(mainUnif.staticColor1, params.palette[0][0], params.palette[0][1], params.palette[0][2]);
+    gl.uniform3f(mainUnif.staticColor2, params.palette[1][0], params.palette[1][1], params.palette[1][2]);
+    gl.uniform3f(mainUnif.staticColor3, params.palette[2][0], params.palette[2][1], params.palette[2][2]);
     gl.uniform1f(mainUnif.cycleColorHueSpeed, params.cycleColorHueBaseSpeed * (60 / targetFps));
     gl.uniform1f(mainUnif.extraFallShapeTimeMult, EXTRA_FALL_SHAPE_TIME_MULT);
     gl.uniform2f(mainUnif.extraFallStutterScale, EXTRA_FALL_STUTTER_SCALE[0], EXTRA_FALL_STUTTER_SCALE[1]);
