@@ -8,6 +8,7 @@ precision mediump float;
 uniform sampler2D u_texture;
 uniform vec2 u_resolution;
 uniform float u_time;
+uniform float u_staticTime;
 uniform float u_pixelDensity, u_frameCount;
 uniform float u_seed;
 uniform float u_targetFps;
@@ -257,23 +258,41 @@ vec4 createWithHueCycle(vec4 base, float time) {
   return increaseColorHue(base, amount);
 }
 
+vec4 threeWayGradient(vec4 color1, vec4 color2, vec4 color3, float amount){
+  //create a gradient between the three colors based on the amount
+  float cycleAmount = fract(amount);
+  float segmentAmount = cycleAmount * 3.0;
+
+  if (segmentAmount < 1.0) {
+    return mix(color1, color2, segmentAmount);
+  }
+
+  if (segmentAmount < 2.0) {
+    return mix(color2, color3, segmentAmount - 1.0);
+  }
+
+  return mix(color3, color1, segmentAmount - 2.0);
+}
 // Function to create a gradient pattern within a block
 vec4 createGradientBlock(vec2 st, bool horizontal) {
   float wavelength = 32.1;
 
-  vec4 base = vec4(1., 1., 1., 1.0);
+  vec4 base = vec4(1.0, 0., 0.5, 1.);
+
+
   float amount = 0.;
 
   if(horizontal) {
-    float x = 1.;
-    base = vec4(x, 0.,0.5, 1.0);
     amount = cos(PI/2. + st.y * PI * wavelength) * 0.5 + 0.5; // Amount to increase hue
   } else {
-    float y = 1. ;
-    base = vec4(y, 0., 0.5, 1.0);
     amount = cos(PI/2. + st.x * PI * wavelength) * 0.5 + 0.5; // Amount to increase hue
   }
-  base = increaseColorHue(base, amount);
+
+  if(u_useColorCycle) {
+    base = increaseColorHue(base, amount);
+  } else {
+    base = threeWayGradient(vec4(u_staticColor1, 1.), vec4(u_staticColor2, 1.), vec4(u_staticColor3, 1.), amount);
+  }
 
   return base;
 }
@@ -305,34 +324,13 @@ void main() {
 
     bool useMovementMask = u_shapeNoiseMode == SHAPE_NOISE_BLOCK_NOISE;
 
-
-    //adjust for perceived brightness of rgb, where blue stays the same, red and green decrease
-    blankColor.rgb *= vec3(.9, 0.6, 1.0);
-
     float bgFreq = PI * 2. * 128.;
 
     blankColor.rgb = sin(vec3(st.y + 0.00, st.y + .6666, st.y + 0.3333) * bgFreq) * blankColor.rgb;
-    // blankColor.rgb -= cos(vec3(st.x + 0.6666, st.x + .3333, st.x + 0.) * bgFreq) * blankColor.rgb * 0.5;
 
     bool useGlobalFreeze = u_globalFreeze > 0.5;
-
-    // Global freeze: stop all movement but keep color cycling
-    if (useGlobalFreeze) {
-
-      vec4 color = texture(u_texture, st);
-      bool isBgColor = color == blankColor;
-
-      if(u_useColorCycle && !isBgColor) {
-        // Apply time-based color animation with wrapping to colors (other than bg)
-        color = cycleColorHue(color, u_cycleColorHueSpeed);
-      }
-
-      fragColor = color;
-      return;
-    }
-
-    vec2 orgSt = st; // Store original texture coordinates for later use
-
+    vec2 orgSt = st; // Store original texture coordinates for later use 
+  
     float densityAdjustment = ceil(2. / u_pixelDensity);
 
     float time = u_time; //in seconds
@@ -726,11 +724,14 @@ void main() {
       }
       // resetVariant == 0: no paint active (erased or never painted)
     }
-
+ 
     bool useBlankStatic = random(st * u_blankStaticScale + floor(
-      fract(moveTime * 10.123) * u_blankStaticTimeMult) + 1.) < u_blankStaticThreshold;
+      fract(u_staticTime * 10.123) * u_blankStaticTimeMult) + 1.) < u_blankStaticThreshold;
+    
 
     bool useBlank = (useBlankStatic && !useRibbon) || useBlack;
+
+    bool usingStatic = useBlankStatic ;
 
     if (u_useCamera > 0.5) {
       // Cover-fit camera into canvas, flipping Y (video = top-left, canvas = bottom-left).
@@ -751,13 +752,14 @@ void main() {
     } else if (useBlank) {
       initColor = blankColor;
     } else {
+      float staticBlockTime = floor(u_staticTime * u_blockTimeMult);
 
-      vec2 dirtNoiseSt = floor(st * u_dirtNoiseScale);
-      float rnd = random(dirtNoiseSt + blockTime);
+      vec2 dirtNoiseSt = floor(orgSt * u_dirtNoiseScale);
+      float rnd = random(dirtNoiseSt + staticBlockTime);
 
       bool useBlock = useRibbon && rnd < u_ribbonDirtThreshold;
 
-      vec2 stPlus = ((st) / blockSize);
+      vec2 stPlus = ((orgSt) / blockSize);
       if(useBlock) {
         initColor = createGradientBlock(stPlus, horizontalGem);
       } else {
@@ -770,12 +772,15 @@ void main() {
         } else {
           initColor = vec4(u_staticColor3, 1.);
         }
+        usingStatic = true;
       }
 
-      if(u_useColorCycle) {
-        initColor = createWithHueCycle(initColor, u_frameCount + PI);
-      }
+      initColor = createWithHueCycle(initColor, u_frameCount + PI);
     }
+
+
+
+
 
     // Apply reset mode override (after all other useReset logic)
     if (resetMode) {
@@ -784,7 +789,7 @@ void main() {
 
 
     float resetEdgeThreshold = u_resetEdgeThreshold;
-    bool resetEdge = random(2. * st + fract(moveTime)) < resetEdgeThreshold;
+    bool resetEdge = random(2. * orgSt + fract(u_staticTime)) < resetEdgeThreshold;
 
     bool naturalReset = !shouldMove && !shouldFall && willReset;
 
@@ -802,6 +807,32 @@ void main() {
     if (freezeMode && !resetMode) {
       useReset = false;
     }
+
+
+
+            // Global freeze: stop all movement but keep color cycling
+    if (useGlobalFreeze) {
+
+      vec4 color = texture(u_texture, orgSt);
+ 
+      if(usingStatic && useReset) {
+        if(useBlank) {
+          color = blankColor;
+        } else {
+          color = initColor;
+        }
+      } 
+
+      bool isBgColor = color == blankColor;
+      if(u_useColorCycle && !isBgColor) {
+        // Apply time-based color animation with wrapping to colors (other than bg)
+        color = cycleColorHue(color, u_cycleColorHueSpeed);
+      }
+
+      fragColor = color;
+      return;
+    }
+
 
     // Sample from the previous state with the calculated coordinates
     vec4 color = texture(u_texture, st);

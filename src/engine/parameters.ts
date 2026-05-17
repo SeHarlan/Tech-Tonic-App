@@ -1,4 +1,4 @@
-import type { ShaderParams } from './types';
+import type { ColorPalette, ShaderParams } from './types';
 
 export const SEED_MODULUS = 222; //above ~300 start affecting noise shapes way too much
 
@@ -116,15 +116,6 @@ export function getMoveShapeScale(
 
 // --- Color Palettes ---
 
-export type ColorPalette = {
-  name: string;
-  colors: [
-    [number, number, number],
-    [number, number, number],
-    [number, number, number],
-  ];
-};
-
 // Primary colors (R/G/B). Color cycle is only enabled for this palette.
 export const PRIMARY_PALETTE: ColorPalette = {
   name: 'primary',
@@ -133,20 +124,84 @@ export const PRIMARY_PALETTE: ColorPalette = {
     [0, 1, 0],
     [0, 0, 1],
   ],
+  useColorCycle: true,
 };
 
 // Non-primary palettes. Empty for now; add entries to expand the pool.
-export const ADDITIONAL_PALETTES: ColorPalette[] = [];
+export const ADDITIONAL_PALETTES: ColorPalette[] = [
+  {
+    name: "dim",
+    colors: [
+      [0.33, 0, 0],
+      [0, 0.33, 0],
+      [0, 0, 0.33],
+    ],
+    useColorCycle: true,
+  },
+
+  {
+    name: "b&w",
+    colors: [
+      [0.66, 0.66, 0.66],
+      [0.33, 0.33, 0.33],
+      [1, 1, 1],
+    ],
+    useColorCycle: false,
+  },
+  {
+    name: "neon",
+    colors: [
+      [1, 0, 1],
+      [1, 1, 0],
+      [0, 1, 1],
+    ],
+    useColorCycle: false,
+  },
+  {
+    name: "vapor",
+    colors: [
+      [0, 0.5, 1],
+      [0, 1, 0.5],
+      [0.75, 0, 1],
+    ],
+    useColorCycle: false,
+  },
+  // {
+  //   name: "plum",
+  //   colors: [
+  //     [0.75, 0, 0.75],
+  //     [1, 0.25, 0],
+  //     [0.5, 0, 0.75],
+  //   ],
+  //   useColorCycle: false,
+  // },
+  // {
+  //   name: "peach",
+  //   colors: [
+  //     [1, 0.25, 0],
+  //     [0.8, 0.8, 0],
+  //     [0.75, 0, 0.75],
+  //   ],
+  //   useColorCycle: false,
+  // },
+  // {
+  //   name: "ocean",
+  //   colors: [
+  //     [0, 0, 1],
+  //     [0, 0.5, 0.75],
+  //     [0.25, 0, 0.75],
+  //   ],
+  //   useColorCycle: false,
+  // },
+];
 
 export function chooseColorPalette(
   rng: () => number = Math.random,
-): { palette: ColorPalette; useColorCycle: boolean } {
+) {
+  // return ADDITIONAL_PALETTES[ADDITIONAL_PALETTES.length - 1];
   const all = [PRIMARY_PALETTE, ...ADDITIONAL_PALETTES];
   const choice = all[Math.floor(rng() * all.length)];
-  return {
-    palette: choice,
-    useColorCycle: choice === PRIMARY_PALETTE,
-  };
+  return choice;
 }
 
 // --- Parameter Randomization ---
@@ -155,7 +210,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const rng = createSeededRNG(rngSeed);
 
   const randomFloat = (min: number, max: number) => rng() * (max - min) + min;
-
+  const randomFromArray = (array: number[]) => array[Math.floor(rng() * array.length)];
   // Blocking parameters
   const fxWithBlocking = weightedRandom<boolean>(
     [
@@ -423,25 +478,24 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     movementShapeScalingEffective,
   ] as [number, number];
 
-  // Color cycle hue speed: 327/333 chance of slow drift, 6/333 chance of rapid cycle.
-  const cycleColorHueBaseSpeed = weightedRandom<boolean>(
-    [
-      [false, 327],
-      [true, 6],
-    ],
-    rng,
-  )
-    ? weightedRandom<number>(
-        [
-          [0.5, 1],
-          [0.525, 1],
-          [0.55, 1],
-        ],
-        rng,
-      )
-    : 0.005;
+  const palette = chooseColorPalette(rng);
+  
 
-  const { palette, useColorCycle } = chooseColorPalette(rng);
+  let cycleColorHueBaseSpeed = 0;
+
+  if (palette.useColorCycle) {
+    // Color cycle hue speed: 327/333 chance of slow drift, 6/333 chance of rapid cycle.
+    cycleColorHueBaseSpeed = weightedRandom<boolean>(
+      [
+        [false, 327],
+        [true, 6],
+      ],
+      rng,
+    )
+      ? randomFromArray([0.5, 0.525, 0.55])
+      : randomFromArray([0.00475, 0.005, 0.00525]);
+
+  }  
 
   return {
     seed: rngSeed,
@@ -480,8 +534,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     movementNoiseShapeDirection,
     blockNoiseDisableShapeMovement,
     cycleColorHueBaseSpeed,
-    palette: palette.colors,
-    useColorCycle,
+    palette,
   };
 }
 

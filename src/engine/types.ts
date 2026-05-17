@@ -20,7 +20,15 @@ export interface EngineState {
 }
 
 // --- Shader Parameters (all deterministic from seed) ---
-
+export type ColorPalette = {
+  name: string;
+  colors: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+  ];
+  useColorCycle: boolean;
+};
 export interface ShaderParams {
   seed: number;
   fxWithBlocking: boolean;
@@ -57,12 +65,7 @@ export interface ShaderParams {
   movementNoiseShapeDirection: number;
   blockNoiseDisableShapeMovement: boolean;
   cycleColorHueBaseSpeed: number;
-  palette: [
-    [number, number, number],
-    [number, number, number],
-    [number, number, number],
-  ];
-  useColorCycle: boolean;
+  palette: ColorPalette;
 }
 
 // --- Drawing Types ---

@@ -62,7 +62,7 @@ const RESET_VARIANCE_TROUGH_DUTY = 0.75;
 const RIBBON_DIRT_THRESHOLD = 0.9;
 const BLANK_STATIC_TIME_MULT = 5.0;
 const USE_GRAYSCALE = false;
-const BLANK_COLOR: [number, number, number] = [0.11, 0.11, 0.11]
+const BLANK_COLOR: [number, number, number] = [0.07, 0.06, 0.08]
 const EXTRA_FALL_STUTTER_SCALE: [number, number] = [50.0, 500.01];
 const EXTRA_MOVE_STUTTER_SCALE: [number, number] = [500.0, 50.01];
 const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
@@ -243,6 +243,7 @@ export function createEngine(config: EngineConfig): Engine {
     texture: gl.getUniformLocation(mainProg, 'u_texture'),
     resolution: gl.getUniformLocation(mainProg, 'u_resolution'),
     time: gl.getUniformLocation(mainProg, 'u_time'),
+    staticTime: gl.getUniformLocation(mainProg, 'u_staticTime'),
     pixelRatio: gl.getUniformLocation(mainProg, 'u_pixelDensity'),
     seed: gl.getUniformLocation(mainProg, 'u_seed'),
     baseChunkSize: gl.getUniformLocation(mainProg, 'u_baseChunkSize'),
@@ -536,6 +537,8 @@ export function createEngine(config: EngineConfig): Engine {
   let seed = normalizeSeed(config.seed ?? Math.floor(Math.random() * SEED_MODULUS));
   let params = randomizeShaderParameters(seed);
   let time = 0;
+  let staticTime = 0;
+  let staticTotalFrameCount = 0;
   let totalFrameCount = 0;
   let frameCount = 0;
   let currentFps = 0;
@@ -608,6 +611,8 @@ export function createEngine(config: EngineConfig): Engine {
     waterfallVariant = params.defaultWaterfallMode;
     time = 0;
     totalFrameCount = 0;
+    staticTime = 0;
+    staticTotalFrameCount = 0;
     isPointerDown = false;
   }
 
@@ -787,6 +792,7 @@ export function createEngine(config: EngineConfig): Engine {
     // Frame uniforms
     gl.uniform1f(mainUnif.targetFps, targetFps);
     gl.uniform1f(mainUnif.time, time);
+    gl.uniform1f(mainUnif.staticTime, staticTime);
     gl.uniform1f(mainUnif.frameCount, totalFrameCount);
     gl.uniform1f(mainUnif.displayFps, currentFps);
     gl.uniform2f(mainUnif.resolution, canvas.width, canvas.height);
@@ -807,13 +813,13 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
     gl.uniform1f(mainUnif.ribbonDirtThreshold, RIBBON_DIRT_THRESHOLD);
     gl.uniform1i(mainUnif.useGrayscale, USE_GRAYSCALE ? 1 : 0);
-    gl.uniform1i(mainUnif.useColorCycle, params.useColorCycle ? 1 : 0);
+    gl.uniform1i(mainUnif.useColorCycle, params.palette.useColorCycle ? 1 : 0);
     gl.uniform1f(mainUnif.blankStaticThreshold, params.blankStaticThreshold);
     gl.uniform1f(mainUnif.blankStaticTimeMult, BLANK_STATIC_TIME_MULT);
     gl.uniform3f(mainUnif.blankColor, BLANK_COLOR[0], BLANK_COLOR[1], BLANK_COLOR[2]);
-    gl.uniform3f(mainUnif.staticColor1, params.palette[0][0], params.palette[0][1], params.palette[0][2]);
-    gl.uniform3f(mainUnif.staticColor2, params.palette[1][0], params.palette[1][1], params.palette[1][2]);
-    gl.uniform3f(mainUnif.staticColor3, params.palette[2][0], params.palette[2][1], params.palette[2][2]);
+    gl.uniform3f(mainUnif.staticColor1, params.palette.colors[0][0], params.palette.colors[0][1], params.palette.colors[0][2]);
+    gl.uniform3f(mainUnif.staticColor2, params.palette.colors[1][0], params.palette.colors[1][1], params.palette.colors[1][2]);
+    gl.uniform3f(mainUnif.staticColor3, params.palette.colors[2][0], params.palette.colors[2][1], params.palette.colors[2][2]);
     gl.uniform1f(mainUnif.cycleColorHueSpeed, params.cycleColorHueBaseSpeed * (60 / targetFps));
     gl.uniform1f(mainUnif.extraFallShapeTimeMult, EXTRA_FALL_SHAPE_TIME_MULT);
     gl.uniform2f(mainUnif.extraFallStutterScale, EXTRA_FALL_STUTTER_SCALE[0], EXTRA_FALL_STUTTER_SCALE[1]);
@@ -951,6 +957,9 @@ export function createEngine(config: EngineConfig): Engine {
       frameCount++;
       totalFrameCount++;
     }
+    // staticTime advances every frame, even when globally frozen
+    staticTime = staticTotalFrameCount / targetFps;
+    staticTotalFrameCount++;
 
     // Handle force-reset countdown
     if (forceResetFrames > 0) {
@@ -1040,6 +1049,8 @@ export function createEngine(config: EngineConfig): Engine {
           .then(() => {
             totalFrameCount = origFrameCount;
             time = totalFrameCount / targetFps;
+            staticTotalFrameCount = totalFrameCount;
+            staticTime = time;
           })
           .catch((err) => console.error('Failed to reload NFT thumbnail for reset:', err));
         return;
@@ -1073,6 +1084,8 @@ export function createEngine(config: EngineConfig): Engine {
       params = { ...randomizeShaderParameters(seed), ...state.params };
       totalFrameCount = state.totalFrameCount;
       time = totalFrameCount / targetFps;
+      staticTotalFrameCount = totalFrameCount;
+      staticTime = time;
 
       // Convert Blobs to object URLs for image loading
       const toSrc = (buf: Blob | HTMLImageElement) =>
@@ -1134,6 +1147,8 @@ export function createEngine(config: EngineConfig): Engine {
         totalFrameCount = newTotalFrameCount;
       }
       time = totalFrameCount / targetFps;
+      staticTotalFrameCount = totalFrameCount;
+      staticTime = time;
 
       waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
       manualModeFlag = manualMode ?? false;
