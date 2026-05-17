@@ -317,17 +317,12 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   const shapeNoiseMode = weightedRandom<ShapeNoiseMode>(
     [
       [ShapeNoiseMode.BlockNoise, 4],
-      [ShapeNoiseMode.StructuralQuintic, 1],
+       [ShapeNoiseMode.StructuralQuintic, 1],
     ],
     rng,
   );
 
-  // BlockNoise mode samples 4 independent channels per pixel and ORs opposing
-  // pairs (L||R, U||D), which roughly doubles the activation rate vs the
-  // single-sample StructuralQuintic path at the same threshold. Compensate
-  // with a lower threshold so visible movement density matches.
-  const shouldMoveThreshold = shapeNoiseMode === ShapeNoiseMode.BlockNoise ? 0.123 : 0.2;
-  const shouldFallThreshold = shouldMoveThreshold;
+
 
   // For StructuralQuintic: pick a horizontal direction for the shape scroll.
   // For BlockNoise: optionally disable XY shape scroll (handled in renderer).
@@ -338,12 +333,24 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
   } else {
     blockNoiseDisableShapeMovement = weightedRandom<boolean>(
       [
-        [false, 4],
         [true, 1],
+        [false, 3],
       ],
       rng,
     );
   }
+
+    // BlockNoise mode samples 4 independent channels per pixel and ORs opposing
+  // pairs (L||R, U||D), which roughly doubles the activation rate vs the
+  // single-sample StructuralQuintic path at the same threshold. Compensate
+  // with a lower threshold so visible movement density matches.
+  const shouldMoveThreshold =
+    shapeNoiseMode === ShapeNoiseMode.BlockNoise
+    ? blockNoiseDisableShapeMovement
+      ? 0.25
+      : 0.123
+    : 0.2;
+  const shouldFallThreshold = shouldMoveThreshold;
 
   // > 1 creates tiling, but 2 or 3 is kinda cool, might be good for a rare
   const movementShapeScalingBase = blockNoiseDisableShapeMovement
@@ -356,7 +363,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
         ],
         rng,
       )
-    : //if there is shape movement
+    : //if there is xy movement for the shapes
       weightedRandom(
         [
           [0.25, 1],
@@ -380,6 +387,24 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     movementShapeScalingEffective,
     movementShapeScalingEffective,
   ] as [number, number];
+
+  // Color cycle hue speed: 327/333 chance of slow drift, 6/333 chance of rapid cycle.
+  const cycleColorHueBaseSpeed = weightedRandom<boolean>(
+    [
+      [false, 327],
+      [true, 6],
+    ],
+    rng,
+  )
+    ? weightedRandom<number>(
+        [
+          [0.5, 1],
+          [0.525, 1],
+          [0.55, 1],
+        ],
+        rng,
+      )
+    : 0.005;
 
   return {
     seed: rngSeed,
@@ -417,6 +442,7 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     shapeNoiseMode,
     movementNoiseShapeDirection,
     blockNoiseDisableShapeMovement,
+    cycleColorHueBaseSpeed,
   };
 }
 

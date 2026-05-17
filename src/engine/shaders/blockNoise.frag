@@ -28,8 +28,10 @@ void main() {
     float resetNoise = structuralNoise(noiseSt, u_structuralMoveTime * u_resetNoiseTimeMult);
     // G: blackNoise
     float blackNoise = structuralNoise(noiseSt + 11.11, u_structuralMoveTime + 11.11);
+
+    float ribbonNoiseTimeMult = 0.75;
     // B: ribbonNoise
-    float ribbonNoise = structuralNoise(noiseSt + 22.22, u_structuralMoveTime * 0.5 + 22.22);
+    float ribbonNoise = structuralNoise(noiseSt + 22.22, u_structuralMoveTime * ribbonNoiseTimeMult + 22.22);
 
     fragColor = vec4(resetNoise, blackNoise, ribbonNoise, 1.0);
 }

@@ -56,6 +56,7 @@ export interface ShaderParams {
   shapeNoiseMode: number;
   movementNoiseShapeDirection: number;
   blockNoiseDisableShapeMovement: boolean;
+  cycleColorHueBaseSpeed: number;
 }
 
 // --- Drawing Types ---

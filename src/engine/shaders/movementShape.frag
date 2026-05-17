@@ -32,9 +32,9 @@ void main() {
     vec2 upDomain = blockNoiseDomain(fract(v_texCoord * u_movementShapeScaling + vec2(0.0, -u_movementNoiseXYTime.y)));
 
     float leftNoise = structuralNoise(leftDomain, t);
-    float rightNoise = structuralNoise(rightDomain + vec2(11.31, 11.31), t);
-    float downNoise = structuralNoise(downDomain + vec2(173.29, 173.29), 1.1 + t);
-    float upNoise = structuralNoise(upDomain + vec2(111.11, 111.11), 1.1 + t);
+    float rightNoise = structuralNoise(rightDomain + vec2(11.31, 11.31), 1.1 + t);
+    float downNoise = structuralNoise(downDomain + vec2(173.29, 173.29), 2.2 + t);
+    float upNoise = structuralNoise(upDomain + vec2(111.11, 111.11), 3.3 + t);
 
     fragColor = vec4(leftNoise, rightNoise, upNoise, downNoise);
 }

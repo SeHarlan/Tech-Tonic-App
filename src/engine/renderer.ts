@@ -25,7 +25,8 @@ const RESET_NOISE_TIME_MULT = 5.0; //reset noise z drift relative to structural 
 const MOVEMENT_NOISE_TIME_MULT = 0.008;//z axis for baked movement noise
 // When params.blockNoiseDisableShapeMovement is true the XY shape scroll is killed
 // and the Z drift speed is scaled by this factor to keep the mask alive.
-const MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR = 2.0;
+const MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR = 2;
+const STRUCTURAL_NOISE_DISABLED_TIME_MULT_FACTOR = 3.0;
 // Base drift speed at movementShapeScaling = 1. Multiplied by params.movementShapeScaling
 // at use so apparent on-screen speed stays normalized as scaling changes.
 const MOVEMENT_NOISE_X_TIME_MULT_BASE = 0.013;
@@ -66,7 +67,6 @@ const STATIC_COLOR_1: [number, number, number] = [1, 0, 0];
 const STATIC_COLOR_2: [number, number, number] = [0, 1, 0];
 const STATIC_COLOR_3: [number, number, number] = [0, 0, 1];
 const USE_COLOR_CYCLE = true;
-const CYCLE_COLOR_HUE_BASE_SPEED = 0.005;
 const EXTRA_FALL_STUTTER_SCALE: [number, number] = [50.0, 500.01];
 const EXTRA_MOVE_STUTTER_SCALE: [number, number] = [500.0, 50.01];
 const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
@@ -771,11 +771,14 @@ export function createEngine(config: EngineConfig): Engine {
 
     // Block noise pre-pass
     const moveTime = time * (targetFps / 30);
-    const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT;
-    const movementNoiseTimeMult = params.blockNoiseDisableShapeMovement
-      ? MOVEMENT_NOISE_TIME_MULT * MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR
-      : MOVEMENT_NOISE_TIME_MULT;
-    const mnt = manualModeFlag ? 0.0 : moveTime * movementNoiseTimeMult;
+    const smtNoiseDisabledTimeMult = params.blockNoiseDisableShapeMovement
+      ? STRUCTURAL_NOISE_DISABLED_TIME_MULT_FACTOR
+      : 1;
+    const mntNoiseDisabledTimeMult = params.blockNoiseDisableShapeMovement
+      ? MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR
+      : 1;
+    const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT * smtNoiseDisabledTimeMult;
+    const mnt = manualModeFlag ? 0.0 : moveTime * MOVEMENT_NOISE_TIME_MULT * mntNoiseDisabledTimeMult;
     renderBlockNoise(smt);
     if (params.shapeNoiseMode === ShapeNoiseMode.BlockNoise) {
       const mnxyt = manualModeFlag ? [0.0, 0.0] as [number, number] : movementMaskXYTime(moveTime, params.blockingScale);
@@ -817,7 +820,7 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform3f(mainUnif.staticColor1, STATIC_COLOR_1[0], STATIC_COLOR_1[1], STATIC_COLOR_1[2]);
     gl.uniform3f(mainUnif.staticColor2, STATIC_COLOR_2[0], STATIC_COLOR_2[1], STATIC_COLOR_2[2]);
     gl.uniform3f(mainUnif.staticColor3, STATIC_COLOR_3[0], STATIC_COLOR_3[1], STATIC_COLOR_3[2]);
-    gl.uniform1f(mainUnif.cycleColorHueSpeed, CYCLE_COLOR_HUE_BASE_SPEED * (60 / targetFps));
+    gl.uniform1f(mainUnif.cycleColorHueSpeed, params.cycleColorHueBaseSpeed * (60 / targetFps));
     gl.uniform1f(mainUnif.extraFallShapeTimeMult, EXTRA_FALL_SHAPE_TIME_MULT);
     gl.uniform2f(mainUnif.extraFallStutterScale, EXTRA_FALL_STUTTER_SCALE[0], EXTRA_FALL_STUTTER_SCALE[1]);
     gl.uniform2f(mainUnif.extraMoveStutterScale, EXTRA_MOVE_STUTTER_SCALE[0], EXTRA_MOVE_STUTTER_SCALE[1]);
