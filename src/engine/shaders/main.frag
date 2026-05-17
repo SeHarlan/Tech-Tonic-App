@@ -25,7 +25,6 @@ uniform vec2 u_shouldFallScale;
 uniform float u_fallShapeSpeed;
 uniform bool u_fxWithBlocking;
 uniform float u_blockTimeMult;
-uniform float u_structuralTimeMult;
 uniform mediump float u_extraMoveShapeThreshold;
 uniform vec2 u_extraMoveStutterScale;
 uniform mediump float u_extraMoveStutterThreshold;
@@ -377,9 +376,6 @@ void main() {
     float blockTime = floor(time * u_blockTimeMult);
 
     float moveTime = time * (u_targetFps / 30.);
-    // Freeze structural time in manual mode so reset shape doesn't move
-    float structuralMoveTime = u_manualMode > 0.5 ? 0.0 : moveTime * u_structuralTimeMult;
-
 
     // baseChunkSize is in CSS pixels, u_resolution is in actual pixels (already scaled by pixel density)
     // Scale baseChunkSize to actual pixels to match the resolution coordinate space

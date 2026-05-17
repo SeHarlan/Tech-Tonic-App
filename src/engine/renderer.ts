@@ -263,7 +263,6 @@ export function createEngine(config: EngineConfig): Engine {
     fallShapeSpeed: gl.getUniformLocation(mainProg, 'u_fallShapeSpeed'),
     fxWithBlocking: gl.getUniformLocation(mainProg, 'u_fxWithBlocking'),
     blockTimeMult: gl.getUniformLocation(mainProg, 'u_blockTimeMult'),
-    structuralTimeMult: gl.getUniformLocation(mainProg, 'u_structuralTimeMult'),
     extraMoveShapeThreshold: gl.getUniformLocation(mainProg, 'u_extraMoveShapeThreshold'),
     extraMoveStutterScale: gl.getUniformLocation(mainProg, 'u_extraMoveStutterScale'),
     extraMoveStutterThreshold: gl.getUniformLocation(mainProg, 'u_extraMoveStutterThreshold'),
@@ -810,7 +809,6 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.resetThresholdVariance, resetThresholdVariance);
     gl.uniform1f(mainUnif.movementThresholdVariance, movementThresholdVariance);
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
-    gl.uniform1f(mainUnif.structuralTimeMult, STRUCTURAL_TIME_MULT);
     gl.uniform1f(mainUnif.ribbonDirtThreshold, RIBBON_DIRT_THRESHOLD);
     gl.uniform1i(mainUnif.useGrayscale, USE_GRAYSCALE ? 1 : 0);
     gl.uniform1i(mainUnif.useColorCycle, USE_COLOR_CYCLE ? 1 : 0);
