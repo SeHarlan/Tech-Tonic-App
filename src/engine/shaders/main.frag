@@ -435,8 +435,9 @@ void main() {
     bool shuffleMode = false;
     bool moveMode = false;
     float moveDirectionOverride = 0.0;
+    bool useMovementBuffer = movementColor.a >= DRAW_ACTIVE_THRESHOLD;
 
-    if (movementColor.a >= DRAW_ACTIVE_THRESHOLD && movementColor.r >= DRAW_ACTIVE_THRESHOLD) {
+    if (useMovementBuffer && movementColor.r >= DRAW_ACTIVE_THRESHOLD) {
       if (movementColor.r < DRAW_SHIFT_THRESHOLD) {
         shuffleMode = true;
       } else if (movementColor.r < DRAW_DIRECTION_THRESHOLD) {
@@ -455,7 +456,7 @@ void main() {
     bool straightFallMode = false;
     float fallDirectionOverride = 1.0;
 
-    if (movementColor.a >= DRAW_ACTIVE_THRESHOLD && movementColor.g >= DRAW_ACTIVE_THRESHOLD) {
+    if (useMovementBuffer && movementColor.g >= DRAW_ACTIVE_THRESHOLD) {
       if (movementColor.g < G_TRICKLE_MAX) {
         trickleMode = true;
       } else if (movementColor.g < G_STRAIGHT_DOWN_MAX) {
@@ -475,7 +476,7 @@ void main() {
 
     // Decode B channel (freeze) from movement buffer
     bool freezeMode = false;
-    if (movementColor.a >= DRAW_ACTIVE_THRESHOLD && movementColor.b >= DRAW_ACTIVE_THRESHOLD) {
+    if (useMovementBuffer && movementColor.b >= DRAW_ACTIVE_THRESHOLD) {
       freezeMode = true;
     }
 
@@ -483,8 +484,9 @@ void main() {
     bool resetMode = false;
     int resetVariant = 0;
     vec4 paintColor = texture(u_paintTexture, drawSt);
+    bool usePaintBuffer = paintColor.a >= DRAW_ACTIVE_THRESHOLD;
 
-    if (paintColor.a >= DRAW_ACTIVE_THRESHOLD && paintColor.r >= DRAW_ACTIVE_THRESHOLD) {
+    if (usePaintBuffer && paintColor.r >= DRAW_ACTIVE_THRESHOLD) {
       resetMode = true;
       if (paintColor.r < 0.625) {
         resetVariant = 1; // empty
@@ -810,18 +812,19 @@ void main() {
 
 
 
-            // Global freeze: stop all movement but keep color cycling
-    if (useGlobalFreeze) {
+            // Global freeze / manual mode: stop all movement but keep
+            // static-reset flicker and color cycling running on u_staticTime.
+    if (useGlobalFreeze && !useMovementBuffer && !usePaintBuffer) {
 
       vec4 color = texture(u_texture, orgSt);
- 
+
       if(usingStatic && useReset) {
         if(useBlank) {
           color = blankColor;
         } else {
           color = initColor;
         }
-      } 
+      }
 
       bool isBgColor = color == blankColor;
       if(u_useColorCycle && !isBgColor) {

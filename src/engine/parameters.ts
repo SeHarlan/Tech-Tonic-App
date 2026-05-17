@@ -199,9 +199,9 @@ export function chooseColorPalette(
   rng: () => number = Math.random,
 ) {
   // return ADDITIONAL_PALETTES[ADDITIONAL_PALETTES.length - 1];
-  const all = [PRIMARY_PALETTE, ...ADDITIONAL_PALETTES];
-  const choice = all[Math.floor(rng() * all.length)];
-  return choice;
+
+  if (rng() < 0.75) return PRIMARY_PALETTE;
+  return ADDITIONAL_PALETTES[Math.floor(rng() * ADDITIONAL_PALETTES.length)];
 }
 
 // --- Parameter Randomization ---

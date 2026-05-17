@@ -62,7 +62,7 @@ const RESET_VARIANCE_TROUGH_DUTY = 0.75;
 const RIBBON_DIRT_THRESHOLD = 0.9;
 const BLANK_STATIC_TIME_MULT = 5.0;
 const USE_GRAYSCALE = false;
-const BLANK_COLOR: [number, number, number] = [0.07, 0.06, 0.08]
+const BLANK_COLOR: [number, number, number] = [0.09, 0.07, 0.1]
 const EXTRA_FALL_STUTTER_SCALE: [number, number] = [50.0, 500.01];
 const EXTRA_MOVE_STUTTER_SCALE: [number, number] = [500.0, 50.01];
 const EXTRA_FALL_STUTTER_THRESHOLD = 0.1;
@@ -544,6 +544,10 @@ export function createEngine(config: EngineConfig): Engine {
   let currentFps = 0;
   let globalFreezeFlag = false;
   let manualModeFlag = false;
+  // Snapshot of `time` taken when manual mode is entered. Used to freeze
+  // blockNoise / movementShape inputs at the moment manual flipped on,
+  // mirroring how globalFreeze naturally holds them (since `time` stops there).
+  let manualModeFrozenTime = 0;
   let forceResetFlag = false;
   let forceResetFrames = 0;
   let running = false;
@@ -771,17 +775,22 @@ export function createEngine(config: EngineConfig): Engine {
 
     // Block noise pre-pass
     const moveTime = time * (targetFps / 30);
+    // In manual mode, freeze the noise base at the moment manual was entered
+    // (mirrors globalFreeze, which holds the same value because `time` stops).
+    const noiseBaseTime = manualModeFlag
+      ? manualModeFrozenTime * (targetFps / 30)
+      : moveTime;
     const smtNoiseDisabledTimeMult = params.blockNoiseDisableShapeMovement
       ? STRUCTURAL_NOISE_DISABLED_TIME_MULT_FACTOR
       : 1;
     const mntNoiseDisabledTimeMult = params.blockNoiseDisableShapeMovement
       ? MOVEMENT_NOISE_DISABLED_TIME_MULT_FACTOR
       : 1;
-    const smt = manualModeFlag ? 0.0 : moveTime * STRUCTURAL_TIME_MULT * smtNoiseDisabledTimeMult;
-    const mnt = manualModeFlag ? 0.0 : moveTime * MOVEMENT_NOISE_TIME_MULT * mntNoiseDisabledTimeMult;
+    const smt = noiseBaseTime * STRUCTURAL_TIME_MULT * smtNoiseDisabledTimeMult;
+    const mnt = noiseBaseTime * MOVEMENT_NOISE_TIME_MULT * mntNoiseDisabledTimeMult;
     renderBlockNoise(smt);
     if (params.shapeNoiseMode === ShapeNoiseMode.BlockNoise) {
-      const mnxyt = manualModeFlag ? [0.0, 0.0] as [number, number] : movementMaskXYTime(moveTime, params.blockingScale);
+      const mnxyt = movementMaskXYTime(noiseBaseTime, params.blockingScale);
       renderMovementShapeMask(smt, mnt, mnxyt);
     }
 
@@ -1037,7 +1046,10 @@ export function createEngine(config: EngineConfig): Engine {
     setGlobalFreeze(frozen: boolean) { globalFreezeFlag = frozen; },
     isGlobalFrozen() { return globalFreezeFlag; },
 
-    setManualMode(manual: boolean) { manualModeFlag = manual; },
+    setManualMode(manual: boolean) {
+      if (manual && !manualModeFlag) manualModeFrozenTime = time;
+      manualModeFlag = manual;
+    },
     isManualMode() { return manualModeFlag; },
 
     forceReset() {
@@ -1152,6 +1164,7 @@ export function createEngine(config: EngineConfig): Engine {
 
       waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
       manualModeFlag = manualMode ?? false;
+      if (manualModeFlag) manualModeFrozenTime = time;
       isPointerDown = false;
     },
 
@@ -1193,7 +1206,7 @@ export function createEngine(config: EngineConfig): Engine {
     getDrawingManager() { return drawing; },
 
     handlePointerDown(canvasX: number, canvasY: number) {
-      if (globalFreezeFlag) return;
+      // if (globalFreezeFlag) return;
       isPointerDown = true;
       lastPointerX = canvasX;
       lastPointerY = canvasY;
@@ -1206,7 +1219,8 @@ export function createEngine(config: EngineConfig): Engine {
     },
 
     handlePointerMove(canvasX: number, canvasY: number) {
-      if (!isPointerDown || globalFreezeFlag) return;
+      // if (!isPointerDown || globalFreezeFlag) return;
+      if (!isPointerDown) return;
       drawing.drawLine(lastPointerX, lastPointerY, canvasX, canvasY, drawMode, direction, {
         waterfallVariant,
         eraseVariant,
