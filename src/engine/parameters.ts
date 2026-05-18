@@ -225,11 +225,11 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     [
       [8, 1],
       [16, 2],
-      [32, 3],
-      [64, 5],
-      [128, 10],
-      [256, 10],
-      [512, 5],
+      [32, 30],
+      [64, 50],
+      [128, 100],
+      [256, 100],
+      [512, 50],
     ],
     rng,
   );
@@ -487,13 +487,13 @@ export function randomizeShaderParameters(seedValue: number): ShaderParams {
     // Color cycle hue speed: 327/333 chance of slow drift, 6/333 chance of rapid cycle.
     cycleColorHueBaseSpeed = weightedRandom<boolean>(
       [
-        [false, 327],
-        [true, 6],
+        [false, 324],
+        [true, 9],
       ],
       rng,
     )
       ? randomFromArray([0.5, 0.525, 0.55])
-      : randomFromArray([0.00475, 0.005, 0.00525]);
+      : randomFromArray([0.0045, 0.005, 0.0055]);
 
   }  
 

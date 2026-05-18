@@ -766,20 +766,16 @@ export function createEngine(config: EngineConfig): Engine {
   function render() {
     const nextFbIndex = (currentFbIndex + 1) % 2;
 
-    // Manual mode: zero out autonomous thresholds.
-    const effMove = manualModeFlag ? 0.0 : params.shouldMoveThreshold;
-    const effFall = manualModeFlag ? 0.0 : params.shouldFallThreshold;
-    const effReset = manualModeFlag ? 0.0 : params.resetThreshold;
-    const effExtraFall = manualModeFlag ? 0.0 : params.extraFallShapeThreshold;
-    const effExtraMove = manualModeFlag ? 0.0 : params.extraMoveShapeThreshold;
+    const effMove = params.shouldMoveThreshold;
+    const effFall = params.shouldFallThreshold;
+    const effReset = params.resetThreshold;
+    const effExtraFall = params.extraFallShapeThreshold;
+    const effExtraMove = params.extraMoveShapeThreshold;
 
     // Block noise pre-pass
     const moveTime = time * (targetFps / 30);
-    // In manual mode, freeze the noise base at the moment manual was entered
-    // (mirrors globalFreeze, which holds the same value because `time` stops).
-    const noiseBaseTime = manualModeFlag
-      ? manualModeFrozenTime * (targetFps / 30)
-      : moveTime;
+    const noiseBaseTime = moveTime;
+
     const smtNoiseDisabledTimeMult = params.blockNoiseDisableShapeMovement
       ? STRUCTURAL_NOISE_DISABLED_TIME_MULT_FACTOR
       : 1;
@@ -813,10 +809,10 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.moveSpeed, MOVE_SPEED);
     gl.uniform1f(mainUnif.resetEdgeThreshold, RESET_EDGE_THRESHOLD);
     const resetThresholdVariance = thresholdVariance(time, RESET_VARIANCE_RATE_SEC, RESET_VARIANCE_AMOUNT);
-    const movementThresholdVariance = manualModeFlag
-      ? 0.0
-      : thresholdVariance(time, MOVEMENT_THRESHOLD_VARIANCE_RATE_SEC, MOVEMENT_THRESHOLD_VARIANCE_AMOUNT);
-
+    const movementThresholdVariance = thresholdVariance(time, MOVEMENT_THRESHOLD_VARIANCE_RATE_SEC, MOVEMENT_THRESHOLD_VARIANCE_AMOUNT);
+// const movementThresholdVariance manualModeFlag
+//       ? 0.0
+//       : thresholdVariance(time, MOVEMENT_THRESHOLD_VARIANCE_RATE_SEC, MOVEMENT_THRESHOLD_VARIANCE_AMOUNT);
     gl.uniform1f(mainUnif.resetThresholdVariance, resetThresholdVariance);
     gl.uniform1f(mainUnif.movementThresholdVariance, movementThresholdVariance);
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
@@ -961,7 +957,7 @@ export function createEngine(config: EngineConfig): Engine {
     lastRenderTime = now - (elapsed % frameInterval);
 
     // Advance deterministic time only when not frozen
-    if (!globalFreezeFlag) {
+    if (!globalFreezeFlag && !manualModeFlag) {
       time = totalFrameCount / targetFps;
       frameCount++;
       totalFrameCount++;
@@ -1046,10 +1042,7 @@ export function createEngine(config: EngineConfig): Engine {
     setGlobalFreeze(frozen: boolean) { globalFreezeFlag = frozen; },
     isGlobalFrozen() { return globalFreezeFlag; },
 
-    setManualMode(manual: boolean) {
-      if (manual && !manualModeFlag) manualModeFrozenTime = time;
-      manualModeFlag = manual;
-    },
+    setManualMode(manual: boolean) { manualModeFlag = manual; },
     isManualMode() { return manualModeFlag; },
 
     forceReset() {
@@ -1164,7 +1157,6 @@ export function createEngine(config: EngineConfig): Engine {
 
       waterfallVariant = defaultWaterfallMode ?? params.defaultWaterfallMode;
       manualModeFlag = manualMode ?? false;
-      if (manualModeFlag) manualModeFrozenTime = time;
       isPointerDown = false;
     },
 
@@ -1206,7 +1198,7 @@ export function createEngine(config: EngineConfig): Engine {
     getDrawingManager() { return drawing; },
 
     handlePointerDown(canvasX: number, canvasY: number) {
-      // if (globalFreezeFlag) return;
+      if (globalFreezeFlag) return;
       isPointerDown = true;
       lastPointerX = canvasX;
       lastPointerY = canvasY;
@@ -1219,8 +1211,7 @@ export function createEngine(config: EngineConfig): Engine {
     },
 
     handlePointerMove(canvasX: number, canvasY: number) {
-      // if (!isPointerDown || globalFreezeFlag) return;
-      if (!isPointerDown) return;
+      if (!isPointerDown || globalFreezeFlag) return;
       drawing.drawLine(lastPointerX, lastPointerY, canvasX, canvasY, drawMode, direction, {
         waterfallVariant,
         eraseVariant,

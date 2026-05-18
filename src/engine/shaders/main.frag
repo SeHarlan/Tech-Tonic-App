@@ -327,7 +327,7 @@ void main() {
     float bgFreq = PI * 2. * 128.;
 
     blankColor.rgb = sin(vec3(st.y + 0.00, st.y + .6666, st.y + 0.3333) * bgFreq) * blankColor.rgb;
-
+    bool useManualMode = u_manualMode > 0.5;
     bool useGlobalFreeze = u_globalFreeze > 0.5;
     vec2 orgSt = st; // Store original texture coordinates for later use 
   
@@ -435,7 +435,7 @@ void main() {
     bool shuffleMode = false;
     bool moveMode = false;
     float moveDirectionOverride = 0.0;
-    bool useMovementBuffer = movementColor.a >= DRAW_ACTIVE_THRESHOLD;
+    bool useMovementBuffer = movementColor.a >= DRAW_ACTIVE_THRESHOLD ;
 
     if (useMovementBuffer && movementColor.r >= DRAW_ACTIVE_THRESHOLD) {
       if (movementColor.r < DRAW_SHIFT_THRESHOLD) {
@@ -814,7 +814,9 @@ void main() {
 
             // Global freeze / manual mode: stop all movement but keep
             // static-reset flicker and color cycling running on u_staticTime.
-    if (useGlobalFreeze && !useMovementBuffer && !usePaintBuffer) {
+
+    bool useEarlyManualModeReturn = useManualMode && !usePaintBuffer && !useMovementBuffer;
+    if (useGlobalFreeze || useEarlyManualModeReturn) {
 
       vec4 color = texture(u_texture, orgSt);
 
