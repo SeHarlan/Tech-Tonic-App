@@ -198,8 +198,6 @@ export const ADDITIONAL_PALETTES: ColorPalette[] = [
 export function chooseColorPalette(
   rng: () => number = Math.random,
 ) {
-  // return ADDITIONAL_PALETTES[ADDITIONAL_PALETTES.length - 1];
-
   if (rng() < 0.75) return PRIMARY_PALETTE;
   return ADDITIONAL_PALETTES[Math.floor(rng() * ADDITIONAL_PALETTES.length)];
 }

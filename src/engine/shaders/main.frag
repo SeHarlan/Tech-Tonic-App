@@ -777,7 +777,9 @@ void main() {
         usingStatic = true;
       }
 
-      initColor = createWithHueCycle(initColor, u_frameCount + PI);
+      if(u_useColorCycle) {
+        initColor = createWithHueCycle(initColor, u_frameCount + PI);
+      }
     }
 
 

@@ -547,7 +547,6 @@ export function createEngine(config: EngineConfig): Engine {
   // Snapshot of `time` taken when manual mode is entered. Used to freeze
   // blockNoise / movementShape inputs at the moment manual flipped on,
   // mirroring how globalFreeze naturally holds them (since `time` stops there).
-  let manualModeFrozenTime = 0;
   let forceResetFlag = false;
   let forceResetFrames = 0;
   let running = false;
@@ -810,9 +809,6 @@ export function createEngine(config: EngineConfig): Engine {
     gl.uniform1f(mainUnif.resetEdgeThreshold, RESET_EDGE_THRESHOLD);
     const resetThresholdVariance = thresholdVariance(time, RESET_VARIANCE_RATE_SEC, RESET_VARIANCE_AMOUNT);
     const movementThresholdVariance = thresholdVariance(time, MOVEMENT_THRESHOLD_VARIANCE_RATE_SEC, MOVEMENT_THRESHOLD_VARIANCE_AMOUNT);
-// const movementThresholdVariance manualModeFlag
-//       ? 0.0
-//       : thresholdVariance(time, MOVEMENT_THRESHOLD_VARIANCE_RATE_SEC, MOVEMENT_THRESHOLD_VARIANCE_AMOUNT);
     gl.uniform1f(mainUnif.resetThresholdVariance, resetThresholdVariance);
     gl.uniform1f(mainUnif.movementThresholdVariance, movementThresholdVariance);
     gl.uniform1f(mainUnif.blockTimeMult, BLOCK_TIME_MULT);
